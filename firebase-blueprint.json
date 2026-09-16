@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "student": {
+      "title": "Student",
+      "description": "A student in the climate explorer classroom with their selected climate card, abilities, score, and group.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Student ID (1-21)" },
+        "number": { "type": "number", "description": "Attendance number (1-21)" },
+        "name": { "type": "string", "description": "Student full name" },
+        "password": { "type": "string", "description": "Student login password" },
+        "selectedCharacterId": { "type": "string", "description": "ID of the irreversible chosen climate character" },
+        "majorAbilityUsed": { "type": "boolean", "description": "Whether major ability has been used" },
+        "hiddenAbilityUsed": { "type": "boolean", "description": "Whether hidden ability has been used" },
+        "score": { "type": "number", "description": "Total accumulated score points" },
+        "teamNumber": { "type": "number", "description": "Assigned team group (1-5)" },
+        "selectedAt": { "type": "string", "description": "ISO timestamp when card was locked" }
+      },
+      "required": ["id", "number", "name", "password", "score", "teamNumber"]
+    },
+    "question": {
+      "title": "QuizQuestion",
+      "description": "Climate quiz mission question uploaded by teacher with an image.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique question ID" },
+        "title": { "type": "string", "description": "Question title" },
+        "description": { "type": "string", "description": "Question detailed description" },
+        "imageUrl": { "type": "string", "description": "Question image URL or data URI" },
+        "mode": { "type": "string", "enum": ["individual", "team"], "description": "Competition mode" },
+        "startedAt": { "type": "number", "description": "Timestamp when question started" },
+        "isActive": { "type": "boolean", "description": "Whether this is currently active question" },
+        "correctAnswerHint": { "type": "string", "description": "Teacher grading reference hint" },
+        "isAnswersRevealed": { "type": "boolean", "description": "Whether student answers are revealed to everyone" }
+      },
+      "required": ["id", "title", "imageUrl", "mode", "startedAt", "isActive"]
+    },
+    "submission": {
+      "title": "QuizSubmission",
+      "description": "An answer submitted by a student or team in exact chronological order.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique submission ID" },
+        "questionId": { "type": "string", "description": "Target question ID" },
+        "studentId": { "type": "number", "description": "Submitting student ID" },
+        "studentName": { "type": "string", "description": "Submitting student name" },
+        "characterId": { "type": "string", "description": "Selected character ID at submission" },
+        "teamNumber": { "type": "number", "description": "Team group number" },
+        "answer": { "type": "string", "description": "Answer text entered by student" },
+        "submittedAt": { "type": "number", "description": "Exact millisecond timestamp of submission" },
+        "isGraded": { "type": "boolean", "description": "Grading status by teacher" }
+      },
+      "required": ["id", "questionId", "studentId", "studentName", "answer", "submittedAt"]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/student" },
+      "description": "Collection of classroom students and their state"
+    },
+    "/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/question" },
+      "description": "Collection of quiz mission questions"
+    },
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/submission" },
+      "description": "Collection of real-time answers ordered by submittedAt"
+    }
+  }
+}

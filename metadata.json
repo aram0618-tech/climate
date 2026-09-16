@@ -1,0 +1,7 @@
+{
+  "name": "기후 탐험대",
+  "description": "세계 5대 기후 플레이어 카드와 퀴즈 미션을 즐기는 초등 사회 기후 탐험대",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Classroom quiz and student state rules
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+    match /questions/{questionId} {
+      allow read, write: if true;
+    }
+    match /submissions/{submissionId} {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
