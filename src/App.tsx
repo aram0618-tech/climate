@@ -17,6 +17,7 @@ import {
   syncQuestionToFirestore,
   syncSubmissionToFirestore,
   clearQuestionSubmissionsFromFirestore,
+  initFirestoreData,
 } from './lib/firestoreSync';
 import { testFirebaseConnection } from './lib/firebase';
 import { ClimateCardTopList } from './components/ClimateCardTopList';
@@ -68,8 +69,11 @@ export default function App() {
 
   // 1. Initialize and Subscribe to Firestore Realtime Updates
   useEffect(() => {
-    testFirebaseConnection().then((connected) => {
+    testFirebaseConnection().then(async (connected) => {
       setIsFirebaseConnected(connected);
+      if (connected) {
+        await initFirestoreData();
+      }
     });
 
     // Subscribe to Students
@@ -138,28 +142,22 @@ export default function App() {
   };
 
   // Irreversible Card Confirmation Handler
-  const handleConfirmCardSelection = (studentId: number, cardId: string) => {
-    let updatedStudent: Student | null = null;
+  const handleConfirmCardSelection = async (studentId: number, cardId: string) => {
+    const student = students.find((s) => s.id === studentId);
+    if (!student || student.selectedCharacterId) return;
+
+    const updatedStudent: Student = {
+      ...student,
+      selectedCharacterId: cardId,
+      selectedAt: new Date().toISOString(),
+    };
 
     setStudents((prev) =>
-      prev.map((s) => {
-        if (s.id === studentId) {
-          if (s.selectedCharacterId) return s;
-          const updated = {
-            ...s,
-            selectedCharacterId: cardId,
-            selectedAt: new Date().toISOString(),
-          };
-          updatedStudent = updated;
-          return updated;
-        }
-        return s;
-      })
+      prev.map((s) => (s.id === studentId ? updatedStudent : s))
     );
 
-    if (updatedStudent) {
-      syncStudentToFirestore(updatedStudent);
-    }
+    // Sync to Firestore immediately so all other clients update in real-time
+    await syncStudentToFirestore(updatedStudent);
 
     setIsConfirmModalOpen(false);
     setSelectedCardForConfirm(null);
@@ -425,6 +423,29 @@ export default function App() {
 
           {/* Right Action Bar: Firebase Sync, Sound, Teacher tools & Login */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Firebase Live Cloud Sync Badge */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                isFirebaseConnected
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 shadow-2xs'
+                  : 'bg-amber-50 text-amber-800 border-amber-200 shadow-2xs'
+              }`}
+              title={
+                isFirebaseConnected
+                  ? 'Firebase Firestore 실시간 연동 중: 학생 카드 선택 및 정답이 모든 기기에 실시간 반영됩니다.'
+                  : 'Firebase 연결 확인 중...'
+              }
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isFirebaseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                }`}
+              />
+              <span className="hidden md:inline font-bold">
+                {isFirebaseConnected ? '클라우드 실시간 동기화 ON' : '클라우드 연결 중'}
+              </span>
+            </div>
+
             {/* Audio Toggle */}
             <button
               type="button"
