@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Student, CurrentUser } from '../types';
 import { User, KeyRound, Check, X, ShieldAlert, Sparkles, GraduationCap } from 'lucide-react';
 
+import { verifyTeacherPin, getTeacherPin } from '../utils/teacherSecurity';
+
 interface LoginModalProps {
   students: Student[];
   isOpen: boolean;
@@ -57,55 +59,55 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     e.preventDefault();
     setErrorMessage('');
 
-    if (teacherPassword.trim() === '0000' || teacherPassword.trim() === 'admin') {
+    if (verifyTeacherPin(teacherPassword)) {
       onLoginSuccess({
         role: 'teacher',
       });
       onClose();
     } else {
-      setErrorMessage('교사 비밀번호가 일치하지 않습니다. (비밀번호: 0000)');
+      setErrorMessage('교사 비밀번호가 일치하지 않습니다. (선생님만 로그인 가능)');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl text-slate-800 overflow-hidden"
+        className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-slate-100 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="p-1.5 rounded-xl bg-emerald-950 text-emerald-400 border border-emerald-800">
               {isTeacherMode ? <GraduationCap className="w-5 h-5" /> : <User className="w-5 h-5" />}
             </span>
-            <h3 className="text-base font-black text-slate-900">
-              {isTeacherMode ? '선생님 관리자 로그인' : '학생 로그인'}
+            <h3 className="text-base font-black text-white">
+              {isTeacherMode ? '선생님 관리자 로그인' : '학생 본인 확인 로그인'}
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Mode Switcher */}
-        <div className="flex items-center gap-1.5 my-4 p-1 bg-slate-100 rounded-2xl border border-slate-200">
+        {/* Mode Switch Tabs */}
+        <div className="grid grid-cols-2 gap-2 my-4 p-1 rounded-2xl bg-slate-950 border border-slate-800 text-xs font-bold">
           <button
             type="button"
             onClick={() => {
               setIsTeacherMode(false);
               setErrorMessage('');
             }}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            className={`py-2 rounded-xl transition-all ${
               !isTeacherMode
-                ? 'bg-white text-emerald-700 shadow-sm border border-slate-200/80'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            학생 접속 (21명)
+            학생으로 로그인
           </button>
           <button
             type="button"
@@ -113,47 +115,47 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               setIsTeacherMode(true);
               setErrorMessage('');
             }}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            className={`py-2 rounded-xl transition-all ${
               isTeacherMode
-                ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/80'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            선생님 모드
+            선생님 모드 전환
           </button>
         </div>
 
-        {/* Student Form */}
+        {/* Error Message */}
+        {errorMessage && (
+          <div className="mb-4 p-2.5 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Student Login Form */}
         {!isTeacherMode ? (
           <form onSubmit={handleStudentLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                1. 학생 이름 선택 (총 21명)
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                1. 본인 이름과 번호 선택
               </label>
-              <div className="max-h-44 overflow-y-auto pr-1 grid grid-cols-3 gap-1.5 p-2 bg-slate-50 rounded-2xl border border-slate-200 scrollbar-thin">
-                {students.map((s) => {
-                  const isSelected = selectedStudentId === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => setSelectedStudentId(s.id)}
-                      className={`py-2 px-1 rounded-xl text-xs font-black transition-all text-center border ${
-                        isSelected
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-400 ring-2 ring-emerald-200 shadow-2xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      <span className="text-[10px] text-slate-400 font-bold block">{s.number}번</span>
-                      {s.name}
-                    </button>
-                  );
-                })}
-              </div>
+              <select
+                value={selectedStudentId}
+                onChange={(e) => setSelectedStudentId(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 font-medium focus:outline-none focus:border-emerald-500"
+              >
+                {students.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.number}번 {student.name} ({student.teamNumber}모둠)
+                    {student.selectedCharacterId ? ' [선택완료]' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              <label className="block text-xs font-bold text-slate-300 mb-1">
                 2. 비밀번호 입력
               </label>
               <div className="relative">
@@ -161,62 +163,50 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="비밀번호 입력"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 pr-10"
+                  placeholder="비밀번호를 입력하세요 (기본: 1234)"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3.5 pr-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
                 />
-                <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+                <KeyRound className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
               </div>
-              <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                기본 비밀번호: <span className="text-emerald-700 font-black">1234</span> (또는 출석 번호)
+              <p className="text-[11px] text-slate-500 mt-1">
+                * 기본 비밀번호는 <code className="text-emerald-400">1234</code> 또는 본인의 출석번호 2자리입니다.
               </p>
             </div>
 
-            {errorMessage && (
-              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs text-center font-bold">
-                {errorMessage}
-              </div>
-            )}
-
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black text-sm transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-1.5"
+              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-black text-sm shadow-md shadow-emerald-900/40 flex items-center justify-center gap-1.5 transition-all"
             >
               <Check className="w-4 h-4" />
-              {students.find((s) => s.id === selectedStudentId)?.name || ''} 학생으로 로그인
+              로그인하고 카드 선택하기
             </button>
           </form>
         ) : (
-          /* Teacher Form */
+          /* Teacher Login Form */
           <form onSubmit={handleTeacherLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                선생님 인증 비밀번호
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                교사 비밀번호 입력
               </label>
               <div className="relative">
                 <input
                   type="password"
                   value={teacherPassword}
                   onChange={(e) => setTeacherPassword(e.target.value)}
-                  placeholder="선생님 비밀번호 (기본: 0000)"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 pr-10"
+                  placeholder="교사용 관리 비밀번호 (기본: 0000)"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3.5 pr-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                  autoFocus
                 />
-                <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+                <KeyRound className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                기본 관리자 비밀번호: <span className="text-indigo-700 font-bold">0000</span>
+                * 선생님 초기 설정 비밀번호는 <code className="text-indigo-400">0000</code> 입니다.
               </p>
             </div>
 
-            {errorMessage && (
-              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs text-center font-bold">
-                {errorMessage}
-              </div>
-            )}
-
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-black text-sm transition-all shadow-md shadow-indigo-200 flex items-center justify-center gap-1.5"
+              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-black text-sm shadow-md shadow-indigo-900/40 flex items-center justify-center gap-1.5 transition-all"
             >
               <Check className="w-4 h-4" />
               선생님 모드로 시작하기

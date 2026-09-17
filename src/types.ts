@@ -36,7 +36,10 @@ export interface Student {
   selectedCharacterId: string | null;
   majorAbilityUsed: boolean;
   hiddenAbilityUsed: boolean;
-  score: number;
+  majorAbilityPending?: boolean; // 선생님 사용 승인 대기 중 (1회 제한)
+  hiddenAbilityPending?: boolean; // 선생님 사용 승인 대기 중 (1회 제한)
+  score: number; // 총계 점수 (누적 총점)
+  todayScore: number; // 오늘의 점수 (오늘 획득 점수)
   selectedAt?: string;
   teamNumber: number; // 1~5모둠
 }
@@ -47,7 +50,7 @@ export interface QuizQuestion {
   id: string;
   title: string;
   description: string;
-  imageUrl: string;
+  imageUrl?: string; // 이미지가 있을 수도 있고 없을 수도 있음
   mode: QuizMode; // 'individual' | 'team'
   startedAt: number; // timestamp in ms
   isActive: boolean;
@@ -63,6 +66,7 @@ export interface QuizSubmission {
   characterId: string | null;
   teamNumber: number;
   answer: string;
+  imageUrl?: string; // 학생이 올린 이미지 (선택 사항)
   submittedAt: number; // precise timestamp in ms for sorting
   isGraded?: boolean | null; // true: 정답, false: 오답, null: 미채점
 }

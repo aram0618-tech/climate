@@ -37,7 +37,15 @@ export async function initFirestoreData(): Promise<void> {
 
       INITIAL_STUDENTS.forEach((student) => {
         const docRef = doc(db, STUDENTS_COL, String(student.id));
-        const finalStudent = existingMap.get(student.id) || student;
+        const existing = existingMap.get(student.id);
+        const finalStudent: Student = existing
+          ? {
+              ...student,
+              ...existing,
+              todayScore: typeof existing.todayScore === 'number' ? existing.todayScore : 0,
+              score: typeof existing.score === 'number' ? existing.score : 0,
+            }
+          : student;
         batch.set(docRef, finalStudent, { merge: true });
       });
 
@@ -80,7 +88,15 @@ export function subscribeStudents(onUpdate: (students: Student[]) => void) {
           // Always maintain the complete 21-student roster, merging Firestore changes
           const fullList: Student[] = INITIAL_STUDENTS.map((base) => {
             if (map.has(base.id)) {
-              return { ...base, ...map.get(base.id)! };
+              const live = map.get(base.id)!;
+              return {
+                ...base,
+                ...live,
+                majorAbilityPending: Boolean(live.majorAbilityPending),
+                hiddenAbilityPending: Boolean(live.hiddenAbilityPending),
+                todayScore: typeof live.todayScore === 'number' ? live.todayScore : 0,
+                score: typeof live.score === 'number' ? live.score : 0,
+              };
             }
             return base;
           });
