@@ -194,24 +194,22 @@ export default function App() {
 
   // Student requests ability usage (needs teacher approval)
   const handleRequestAbility = (studentId: number, abilityType: 'major' | 'hidden') => {
-    let targetStudent: Student | null = null;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
         if (s.id === studentId) {
           const updated: Student = {
             ...s,
             majorAbilityPending: abilityType === 'major' ? true : s.majorAbilityPending,
             hiddenAbilityPending: abilityType === 'hidden' ? true : s.hiddenAbilityPending,
           };
-          targetStudent = updated;
+          syncStudentToFirestore(updated);
           return updated;
         }
         return s;
-      })
-    );
-    if (targetStudent) {
-      syncStudentToFirestore(targetStudent);
-    }
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
     if (soundEnabled) {
       soundManager.playCardChosen();
     }
@@ -219,9 +217,8 @@ export default function App() {
 
   // Teacher approves ability usage
   const handleApproveAbility = (studentId: number, abilityType: 'major' | 'hidden') => {
-    let targetStudent: Student | null = null;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
         if (s.id === studentId) {
           const updated: Student = {
             ...s,
@@ -230,15 +227,14 @@ export default function App() {
             hiddenAbilityPending: abilityType === 'hidden' ? false : s.hiddenAbilityPending,
             hiddenAbilityUsed: abilityType === 'hidden' ? true : s.hiddenAbilityUsed,
           };
-          targetStudent = updated;
+          syncStudentToFirestore(updated);
           return updated;
         }
         return s;
-      })
-    );
-    if (targetStudent) {
-      syncStudentToFirestore(targetStudent);
-    }
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
     if (soundEnabled) {
       soundManager.playScoreDing();
     }
@@ -246,160 +242,182 @@ export default function App() {
 
   // Teacher rejects ability usage
   const handleRejectAbility = (studentId: number, abilityType: 'major' | 'hidden') => {
-    let targetStudent: Student | null = null;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
         if (s.id === studentId) {
           const updated: Student = {
             ...s,
             majorAbilityPending: abilityType === 'major' ? false : s.majorAbilityPending,
             hiddenAbilityPending: abilityType === 'hidden' ? false : s.hiddenAbilityPending,
           };
-          targetStudent = updated;
+          syncStudentToFirestore(updated);
           return updated;
         }
         return s;
-      })
-    );
-    if (targetStudent) {
-      syncStudentToFirestore(targetStudent);
-    }
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
   };
 
   // Direct ability toggles (used by teacher or fallback)
   const handleToggleMajorAbility = (studentId: number) => {
-    let targetStudent: Student | null = null;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
         if (s.id === studentId) {
           const updated: Student = {
             ...s,
             majorAbilityUsed: !s.majorAbilityUsed,
             majorAbilityPending: false,
           };
-          targetStudent = updated;
+          syncStudentToFirestore(updated);
           return updated;
         }
         return s;
-      })
-    );
-    if (targetStudent) {
-      syncStudentToFirestore(targetStudent);
-    }
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
   };
 
   const handleToggleHiddenAbility = (studentId: number) => {
-    let targetStudent: Student | null = null;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
         if (s.id === studentId) {
           const updated: Student = {
             ...s,
             hiddenAbilityUsed: !s.hiddenAbilityUsed,
             hiddenAbilityPending: false,
           };
-          targetStudent = updated;
+          syncStudentToFirestore(updated);
           return updated;
         }
         return s;
-      })
-    );
-    if (targetStudent) {
-      syncStudentToFirestore(targetStudent);
-    }
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
   };
 
   // Update Score for single student (오늘 점수 & 누적 총점 모두 반영)
   const handleUpdateScore = (studentId: number, delta: number) => {
-    let targetStudent: Student | null = null;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
         if (s.id === studentId) {
-          const currentScore = typeof s.score === 'number' ? s.score : 0;
-          const currentToday = typeof s.todayScore === 'number' ? s.todayScore : 0;
-          const updated = {
+          const currentScore = typeof s.score === 'number' && !isNaN(s.score) ? s.score : 0;
+          const currentToday = typeof s.todayScore === 'number' && !isNaN(s.todayScore) ? s.todayScore : 0;
+          const updated: Student = {
             ...s,
             score: Math.max(0, currentScore + delta),
             todayScore: Math.max(0, currentToday + delta),
           };
-          targetStudent = updated;
+          syncStudentToFirestore(updated);
           return updated;
         }
         return s;
-      })
-    );
-    if (targetStudent) {
-      syncStudentToFirestore(targetStudent);
-    }
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
+  };
+
+  // Directly set score for a student (선생님 직접 숫자 입력 지원)
+  const handleSetStudentScore = (studentId: number, newScore: number, newTodayScore?: number) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
+        if (s.id === studentId) {
+          const safeScore = Math.max(0, Math.round(newScore));
+          const currentScore = typeof s.score === 'number' ? s.score : 0;
+          const currentToday = typeof s.todayScore === 'number' ? s.todayScore : 0;
+          const delta = safeScore - currentScore;
+          const safeToday = typeof newTodayScore === 'number' 
+            ? Math.max(0, Math.round(newTodayScore))
+            : Math.max(0, currentToday + delta);
+
+          const updated: Student = {
+            ...s,
+            score: safeScore,
+            todayScore: safeToday,
+          };
+          syncStudentToFirestore(updated);
+          return updated;
+        }
+        return s;
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
   };
 
   // Update Score for entire team (모둠전용: 모둠원 전원의 오늘 점수 & 누적 총점 동시 반영)
   const handleUpdateTeamScore = (teamNumber: number, delta: number) => {
-    const updatedList: Student[] = [];
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedStudentsToSync: Student[] = [];
+      const updatedList = prev.map((s) => {
         if (s.teamNumber === teamNumber) {
-          const currentScore = typeof s.score === 'number' ? s.score : 0;
-          const currentToday = typeof s.todayScore === 'number' ? s.todayScore : 0;
-          const updated = {
+          const currentScore = typeof s.score === 'number' && !isNaN(s.score) ? s.score : 0;
+          const currentToday = typeof s.todayScore === 'number' && !isNaN(s.todayScore) ? s.todayScore : 0;
+          const updated: Student = {
             ...s,
             score: Math.max(0, currentScore + delta),
             todayScore: Math.max(0, currentToday + delta),
           };
-          updatedList.push(updated);
+          updatedStudentsToSync.push(updated);
           return updated;
         }
         return s;
-      })
-    );
-    if (updatedList.length > 0) {
-      syncAllStudentsToFirestore(updatedList);
-    }
+      });
+      if (updatedStudentsToSync.length > 0) {
+        syncAllStudentsToFirestore(updatedStudentsToSync);
+      }
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
   };
 
   // Multiply Score
   const handleMultiplyScore = (studentId: number, multiplier: number) => {
-    let targetStudent: Student | null = null;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
         if (s.id === studentId) {
-          const currentScore = typeof s.score === 'number' ? s.score : 0;
-          const currentToday = typeof s.todayScore === 'number' ? s.todayScore : 0;
-          const updated = {
+          const currentScore = typeof s.score === 'number' && !isNaN(s.score) ? s.score : 0;
+          const currentToday = typeof s.todayScore === 'number' && !isNaN(s.todayScore) ? s.todayScore : 0;
+          const updated: Student = {
             ...s,
-            score: Math.max(0, currentScore * multiplier),
-            todayScore: Math.max(0, currentToday * multiplier),
+            score: Math.max(0, Math.round(currentScore * multiplier)),
+            todayScore: Math.max(0, Math.round(currentToday * multiplier)),
           };
-          targetStudent = updated;
+          syncStudentToFirestore(updated);
           return updated;
         }
         return s;
-      })
-    );
-    if (targetStudent) {
-      syncStudentToFirestore(targetStudent);
-    }
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
   };
 
   // Teacher Tool Actions
   const handleResetAllAbilities = () => {
-    const updated = students.map((s) => ({
-      ...s,
-      majorAbilityUsed: false,
-      majorAbilityPending: false,
-      hiddenAbilityUsed: false,
-      hiddenAbilityPending: false,
-    }));
-    setStudents(updated);
-    syncAllStudentsToFirestore(updated);
+    setStudents((prev) => {
+      const updated = prev.map((s) => ({
+        ...s,
+        majorAbilityUsed: false,
+        majorAbilityPending: false,
+        hiddenAbilityUsed: false,
+        hiddenAbilityPending: false,
+      }));
+      syncAllStudentsToFirestore(updated);
+      saveStoredStudents(updated);
+      return updated;
+    });
   };
 
   const handleResetStudentSelection = (studentId: number) => {
-    let targetStudent: Student | null = null;
-    setStudents((prev) =>
-      prev.map((s) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
         if (s.id === studentId) {
-          const res = {
+          const res: Student = {
             ...s,
             selectedCharacterId: null,
             majorAbilityUsed: false,
@@ -407,41 +425,47 @@ export default function App() {
             hiddenAbilityUsed: false,
             hiddenAbilityPending: false,
           };
-          targetStudent = res;
+          syncStudentToFirestore(res);
           return res;
         }
         return s;
-      })
-    );
-    if (targetStudent) {
-      syncStudentToFirestore(targetStudent);
-    }
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
   };
 
   const handleResetEntireClass = () => {
     const fresh = resetAllStudents();
     setStudents(fresh);
     setSubmissions([]);
+    saveStoredStudents(fresh);
     syncAllStudentsToFirestore(fresh);
   };
 
   const handleResetTodayScores = () => {
-    const updated = students.map((s) => ({
-      ...s,
-      todayScore: 0,
-    }));
-    setStudents(updated);
-    syncAllStudentsToFirestore(updated);
+    setStudents((prev) => {
+      const updated = prev.map((s) => ({
+        ...s,
+        todayScore: 0,
+      }));
+      syncAllStudentsToFirestore(updated);
+      saveStoredStudents(updated);
+      return updated;
+    });
   };
 
   const handleAddScoreAll = (points: number) => {
-    const updated = students.map((s) => ({
-      ...s,
-      score: Math.max(0, (s.score || 0) + points),
-      todayScore: Math.max(0, (s.todayScore || 0) + points),
-    }));
-    setStudents(updated);
-    syncAllStudentsToFirestore(updated);
+    setStudents((prev) => {
+      const updated = prev.map((s) => ({
+        ...s,
+        score: Math.max(0, (s.score || 0) + points),
+        todayScore: Math.max(0, (s.todayScore || 0) + points),
+      }));
+      syncAllStudentsToFirestore(updated);
+      saveStoredStudents(updated);
+      return updated;
+    });
     if (soundEnabled) {
       soundManager.playScoreDing();
     }
@@ -764,7 +788,7 @@ export default function App() {
 
       {/* MODAL 3: Detailed Student Character Sheet */}
       <StudentDetailModal
-        student={selectedStudentForDetail}
+        student={students.find((s) => s.id === selectedStudentForDetail?.id) || selectedStudentForDetail}
         currentUser={currentUser}
         isOpen={isDetailModalOpen}
         onClose={() => {
@@ -777,6 +801,7 @@ export default function App() {
         onApproveAbility={handleApproveAbility}
         onRejectAbility={handleRejectAbility}
         onUpdateScore={handleUpdateScore}
+        onSetStudentScore={handleSetStudentScore}
       />
 
       {/* MODAL 4: Teacher Control Classroom Tools */}
@@ -792,6 +817,7 @@ export default function App() {
         onApproveAbility={handleApproveAbility}
         onRejectAbility={handleRejectAbility}
         onLockTeacherMode={handleLockTeacherMode}
+        onSetStudentScore={handleSetStudentScore}
       />
 
       {/* MODAL 5: Teacher PIN Security Authentication */}

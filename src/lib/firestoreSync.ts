@@ -8,12 +8,33 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Student, QuizQuestion, QuizSubmission } from '../types';
-import { INITIAL_STUDENTS } from '../data/students';
+import { INITIAL_STUDENTS, loadStoredStudents } from '../data/students';
 import { INITIAL_QUESTIONS } from '../data/quizMissions';
 
 const STUDENTS_COL = 'students';
 const QUESTIONS_COL = 'questions';
 const SUBMISSIONS_COL = 'submissions';
+
+/**
+ * Ensures clean JSON data without any `undefined` fields which cause Firestore setDoc to fail.
+ */
+export function sanitizeStudent(s: Student): Record<string, any> {
+  return {
+    id: Number(s.id),
+    number: Number(s.number),
+    name: String(s.name || ''),
+    password: String(s.password || '1234'),
+    selectedCharacterId: s.selectedCharacterId ? String(s.selectedCharacterId) : null,
+    majorAbilityUsed: Boolean(s.majorAbilityUsed),
+    hiddenAbilityUsed: Boolean(s.hiddenAbilityUsed),
+    majorAbilityPending: Boolean(s.majorAbilityPending),
+    hiddenAbilityPending: Boolean(s.hiddenAbilityPending),
+    score: typeof s.score === 'number' && !isNaN(s.score) ? Math.max(0, s.score) : 0,
+    todayScore: typeof s.todayScore === 'number' && !isNaN(s.todayScore) ? Math.max(0, s.todayScore) : 0,
+    selectedAt: s.selectedAt ? String(s.selectedAt) : null,
+    teamNumber: Number(s.teamNumber || 1),
+  };
+}
 
 /**
  * Initialize Firestore data if collections are empty.
@@ -26,6 +47,10 @@ export async function initFirestoreData(): Promise<void> {
       console.log(`Seeding initial 21 students to Firestore (found ${studentsSnap.size} docs)...`);
       const batch = writeBatch(db);
       
+      // Check if localStorage has existing students with scores
+      const localStudents = loadStoredStudents();
+      const baseRoster = (localStudents && localStudents.length === 21) ? localStudents : INITIAL_STUDENTS;
+
       // Preserve any students that already exist in Firestore
       const existingMap = new Map<number, Student>();
       studentsSnap.forEach((docSnap) => {
@@ -35,18 +60,18 @@ export async function initFirestoreData(): Promise<void> {
         }
       });
 
-      INITIAL_STUDENTS.forEach((student) => {
+      baseRoster.forEach((student) => {
         const docRef = doc(db, STUDENTS_COL, String(student.id));
         const existing = existingMap.get(student.id);
         const finalStudent: Student = existing
           ? {
               ...student,
               ...existing,
-              todayScore: typeof existing.todayScore === 'number' ? existing.todayScore : 0,
-              score: typeof existing.score === 'number' ? existing.score : 0,
+              todayScore: typeof existing.todayScore === 'number' ? existing.todayScore : (student.todayScore || 0),
+              score: typeof existing.score === 'number' ? existing.score : (student.score || 0),
             }
           : student;
-        batch.set(docRef, finalStudent, { merge: true });
+        batch.set(docRef, sanitizeStudent(finalStudent), { merge: true });
       });
 
       await batch.commit();
@@ -168,11 +193,13 @@ export function subscribeSubmissions(onUpdate: (submissions: QuizSubmission[]) =
 // 4. Save Single Student to Firestore
 export async function syncStudentToFirestore(student: Student): Promise<boolean> {
   try {
+    const cleanData = sanitizeStudent(student);
     const docRef = doc(db, STUDENTS_COL, String(student.id));
-    await setDoc(docRef, student, { merge: true });
+    await setDoc(docRef, cleanData, { merge: true });
     console.log(`Synced student #${student.number} (${student.name}) to Firestore:`, {
-      selectedCharacterId: student.selectedCharacterId,
-      score: student.score,
+      selectedCharacterId: cleanData.selectedCharacterId,
+      score: cleanData.score,
+      todayScore: cleanData.todayScore,
     });
     return true;
   } catch (err) {
@@ -187,7 +214,7 @@ export async function syncAllStudentsToFirestore(students: Student[]): Promise<b
     const batch = writeBatch(db);
     students.forEach((student) => {
       const docRef = doc(db, STUDENTS_COL, String(student.id));
-      batch.set(docRef, student, { merge: true });
+      batch.set(docRef, sanitizeStudent(student), { merge: true });
     });
     await batch.commit();
     console.log(`Synced all ${students.length} students to Firestore.`);

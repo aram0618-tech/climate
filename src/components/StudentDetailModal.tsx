@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Student, ClimateCard, CurrentUser } from '../types';
 import { getCardById } from '../data/climateCards';
 import { CharacterAvatar } from './CharacterAvatar';
-import { X, Award, Zap, Sparkles, Snowflake, Sun, CloudRain, Wind, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { X, Award, Zap, Sparkles, Snowflake, Sun, CloudRain, Wind, CheckCircle2, XCircle, Clock, Edit3, Check } from 'lucide-react';
 import { soundManager } from '../utils/audio';
 
 interface StudentDetailModalProps {
@@ -16,6 +16,7 @@ interface StudentDetailModalProps {
   onApproveAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onRejectAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onUpdateScore: (studentId: number, delta: number) => void;
+  onSetStudentScore?: (studentId: number, totalScore: number, todayScore?: number) => void;
 }
 
 export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
@@ -29,12 +30,46 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   onApproveAbility,
   onRejectAbility,
   onUpdateScore,
+  onSetStudentScore,
 }) => {
+  const [isDirectEditing, setIsDirectEditing] = useState(false);
+  const [customTotalScore, setCustomTotalScore] = useState<number>(0);
+  const [customTodayScore, setCustomTodayScore] = useState<number>(0);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (student) {
+      setCustomTotalScore(student.score || 0);
+      setCustomTodayScore(student.todayScore || 0);
+    }
+  }, [student?.id, student?.score, student?.todayScore]);
+
   if (!isOpen || !student) return null;
 
   const card: ClimateCard | undefined = getCardById(student.selectedCharacterId);
   const isTeacher = currentUser.role === 'teacher';
   const isLoggedInStudent = currentUser.studentId === student.id;
+
+  const handleSaveDirectScore = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!student) return;
+    const safeTotal = Math.max(0, Number(customTotalScore) || 0);
+    const safeToday = Math.max(0, Number(customTodayScore) || 0);
+
+    if (onSetStudentScore) {
+      onSetStudentScore(student.id, safeTotal, safeToday);
+    } else {
+      const delta = safeTotal - (student.score || 0);
+      onUpdateScore(student.id, delta);
+    }
+
+    soundManager.playScoreDing();
+    setSaveSuccessMsg('점수가 성공적으로 저장되었습니다!');
+    setTimeout(() => {
+      setSaveSuccessMsg(null);
+      setIsDirectEditing(false);
+    }, 1500);
+  };
 
   const handleMajorAbilityAction = () => {
     if (!card || student.majorAbilityUsed) return;
@@ -289,30 +324,121 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
             {/* Score Adjustment: Teacher Only */}
             {currentUser.role === 'teacher' ? (
-              <div className="flex items-center justify-between p-3.5 bg-slate-950 rounded-2xl border border-slate-800">
-                <div>
-                  <span className="text-xs font-black text-slate-200 block">선생님 전용 점수 부여/차감</span>
-                  <span className="text-[11px] text-slate-500">클릭 시 오늘의 점수와 총계 점수에 함께 반영됩니다.</span>
-                </div>
-                <div className="flex items-center gap-1.5">
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-black text-slate-200 flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-amber-400" />
+                      선생님 점수 관리 & 직접 입력
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      오늘 점수: <strong className="text-emerald-400">+{student.todayScore || 0}점</strong> · 누적 총점: <strong className="text-amber-400">{student.score || 0}점</strong>
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => onUpdateScore(student.id, -1)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-700 text-xs font-bold"
+                    onClick={() => setIsDirectEditing(!isDirectEditing)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold flex items-center gap-1 transition-colors"
                   >
-                    -1점
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onUpdateScore(student.id, 1);
-                      soundManager.playScoreDing();
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black"
-                  >
-                    +1점 추가
+                    <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{isDirectEditing ? '간편 버튼 모드' : '점수 직접 입력'}</span>
                   </button>
                 </div>
+
+                {isDirectEditing ? (
+                  <form onSubmit={handleSaveDirectScore} className="p-3 rounded-xl bg-slate-900 border border-indigo-900/60 space-y-2.5">
+                    <div className="text-[11px] font-bold text-indigo-300 flex items-center gap-1">
+                      <span>✏️ 점수 직접 수정 (저장 시 클라우드 및 새로고침 영구 보존)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] text-slate-400 font-bold block mb-1">
+                          누적 총계 점수:
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={customTotalScore}
+                          onChange={(e) => setCustomTotalScore(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-black focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-400 font-bold block mb-1">
+                          오늘의 획득 점수:
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={customTodayScore}
+                          onChange={(e) => setCustomTodayScore(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-black focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      {saveSuccessMsg ? (
+                        <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> {saveSuccessMsg}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-500">
+                          원하는 점수를 입력 후 저장 버튼을 누르세요.
+                        </span>
+                      )}
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-colors shadow-sm flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>점수 저장</span>
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                    <span className="text-[11px] text-slate-400">빠른 점수 증감:</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onUpdateScore(student.id, -1)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-700 text-xs font-bold"
+                      >
+                        -1점
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdateScore(student.id, 1);
+                          soundManager.playScoreDing();
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-2xs"
+                      >
+                        +1점
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdateScore(student.id, 2);
+                          soundManager.playScoreDing();
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-black shadow-2xs"
+                      >
+                        +2점
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdateScore(student.id, 5);
+                          soundManager.playScoreDing();
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-black shadow-2xs"
+                      >
+                        +5점
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-center text-xs text-slate-500">

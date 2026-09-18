@@ -34,6 +34,7 @@ interface TeacherControlModalProps {
   onApproveAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onRejectAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onLockTeacherMode?: () => void;
+  onSetStudentScore?: (studentId: number, newScore: number, newTodayScore?: number) => void;
 }
 
 export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
@@ -48,10 +49,30 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
   onApproveAbility,
   onRejectAbility,
   onLockTeacherMode,
+  onSetStudentScore,
 }) => {
   const [selectedStudentForReset, setSelectedStudentForReset] = useState<number>(1);
   const [confirmFullReset, setConfirmFullReset] = useState<boolean>(false);
   const [confirmResetText, setConfirmResetText] = useState<string>('');
+
+  // Custom batch points
+  const [customBatchPoints, setCustomBatchPoints] = useState<number>(5);
+
+  // Direct score adjustment state
+  const [selectedStudentForScore, setSelectedStudentForScore] = useState<number>(1);
+  const [inputTotalScore, setInputTotalScore] = useState<number>(0);
+  const [inputTodayScore, setInputTodayScore] = useState<number>(0);
+  const [scoreSaveMsg, setScoreSaveMsg] = useState<string | null>(null);
+
+  // Update input fields when student selection changes or modal opens
+  const activeStudent = students.find((s) => s.id === selectedStudentForScore) || students[0];
+
+  React.useEffect(() => {
+    if (activeStudent) {
+      setInputTotalScore(activeStudent.score || 0);
+      setInputTodayScore(activeStudent.todayScore || 0);
+    }
+  }, [selectedStudentForScore, activeStudent?.score, activeStudent?.todayScore, isOpen]);
 
   // Change PIN state
   const [isChangingPin, setIsChangingPin] = useState<boolean>(false);
@@ -60,6 +81,21 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
   const [pinChangeMessage, setPinChangeMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   if (!isOpen) return null;
+
+  const handleSaveStudentDirectScore = (e: React.FormEvent) => {
+    e.preventDefault();
+    const safeTotal = Math.max(0, Number(inputTotalScore) || 0);
+    const safeToday = Math.max(0, Number(inputTodayScore) || 0);
+
+    if (onSetStudentScore) {
+      onSetStudentScore(selectedStudentForScore, safeTotal, safeToday);
+    }
+    soundManager.playScoreDing();
+    setScoreSaveMsg(`${activeStudent?.number}번 ${activeStudent?.name} 학생의 점수가 안전하게 저장되었습니다!`);
+    setTimeout(() => {
+      setScoreSaveMsg(null);
+    }, 2000);
+  };
 
   // Find all pending ability requests
   const pendingRequests: {
@@ -228,7 +264,7 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
             <p className="text-xs text-slate-400 mb-3">
               학급 전체 참여나 보너스 미션 달성 시 21명 전원에게 동시에 점수를 추가합니다.
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mb-3">
               <button
                 type="button"
                 onClick={() => onAddScoreAll(1)}
@@ -252,11 +288,45 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => onAddScoreAll(5)}
+                className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-emerald-950 text-emerald-300 border border-slate-700 hover:border-emerald-700 text-xs font-black transition-all flex items-center gap-1"
+              >
+                전원 +5점
+              </button>
+              <button
+                type="button"
                 onClick={() => onAddScoreAll(-1)}
                 className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-rose-950 text-rose-300 border border-slate-700 hover:border-rose-800 text-xs font-black transition-all"
               >
                 전원 -1점
               </button>
+            </div>
+
+            {/* Custom Batch Points Input */}
+            <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-300 font-bold whitespace-nowrap">
+                원하는 점수 직접 입력:
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={customBatchPoints}
+                  onChange={(e) => setCustomBatchPoints(Number(e.target.value))}
+                  placeholder="점수"
+                  className="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-amber-300 font-black text-center focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!customBatchPoints) return;
+                    onAddScoreAll(customBatchPoints);
+                    alert(`전원에게 ${customBatchPoints > 0 ? '+' : ''}${customBatchPoints}점이 일괄 지급되었습니다.`);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-colors"
+                >
+                  전원 지급하기
+                </button>
+              </div>
             </div>
 
             {onResetTodayScore && (
@@ -276,6 +346,83 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
                 </button>
               </div>
             )}
+          </div>
+
+          {/* SECTION 1.5: Individual Student Direct Score Editor (학생 점수 직접 입력/수정) */}
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+            <h4 className="text-xs font-black text-slate-200 mb-1 flex items-center gap-1.5">
+              <Award className="w-4 h-4 text-emerald-400" />
+              학생 점수 직접 입력 및 수정 (클라우드 즉시 영구 보존)
+            </h4>
+            <p className="text-xs text-slate-400 mb-3">
+              특정 학생의 점수를 직접 숫자로 타이핑하여 수정하고 저장합니다. 새로고침해도 안전하게 유지됩니다.
+            </p>
+
+            <form onSubmit={handleSaveStudentDirectScore} className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">
+                  점수 수정할 학생 선택:
+                </label>
+                <select
+                  value={selectedStudentForScore}
+                  onChange={(e) => setSelectedStudentForScore(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 font-bold focus:outline-none focus:border-indigo-500"
+                >
+                  {students.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.number}번 {s.name} ({s.teamNumber}모둠) - 현재 총점: {s.score || 0}점 / 오늘: +{s.todayScore || 0}점
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
+                <div>
+                  <label className="text-[11px] text-slate-400 font-bold block mb-1">
+                    누적 총계 점수:
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={inputTotalScore}
+                    onChange={(e) => setInputTotalScore(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-amber-300 font-black focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-400 font-bold block mb-1">
+                    오늘의 획득 점수:
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={inputTodayScore}
+                    onChange={(e) => setInputTodayScore(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-300 font-black focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                {scoreSaveMsg ? (
+                  <span className="text-xs text-emerald-400 font-bold flex items-center gap-1 animate-pulse">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    {scoreSaveMsg}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-500">
+                    저장 버튼을 누르면 즉시 모든 학생 화면과 데이터베이스에 반영됩니다.
+                  </span>
+                )}
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-colors shadow-sm flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>점수 저장하기</span>
+                </button>
+              </div>
+            </form>
           </div>
 
           {/* SECTION 2: Reset Abilities for Next Round */}
