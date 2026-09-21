@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Student, ClimateCard, CurrentUser } from '../types';
 import { getCardById } from '../data/climateCards';
 import { CharacterAvatar } from './CharacterAvatar';
-import { X, Award, Zap, Sparkles, Snowflake, Sun, CloudRain, Wind, CheckCircle2, XCircle, Clock, Edit3, Check } from 'lucide-react';
+import { X, Award, Zap, Sparkles, Snowflake, Sun, CloudRain, Wind, CheckCircle2, XCircle, Clock, Edit3, Check, Plus } from 'lucide-react';
 import { soundManager } from '../utils/audio';
 
 interface StudentDetailModalProps {
@@ -35,6 +35,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const [isDirectEditing, setIsDirectEditing] = useState(false);
   const [customTotalScore, setCustomTotalScore] = useState<number>(0);
   const [customTodayScore, setCustomTodayScore] = useState<number>(0);
+  const [directRaisePoints, setDirectRaisePoints] = useState<string>('1');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -396,46 +397,92 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     </div>
                   </form>
                 ) : (
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
-                    <span className="text-[11px] text-slate-400">빠른 점수 증감:</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onUpdateScore(student.id, -1)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-700 text-xs font-bold"
-                      >
-                        -1점
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onUpdateScore(student.id, 1);
-                          soundManager.playScoreDing();
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-2xs"
-                      >
-                        +1점
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onUpdateScore(student.id, 2);
-                          soundManager.playScoreDing();
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-black shadow-2xs"
-                      >
-                        +2점
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onUpdateScore(student.id, 5);
-                          soundManager.playScoreDing();
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-black shadow-2xs"
-                      >
-                        +5점
-                      </button>
+                  <div className="space-y-2.5 pt-1 border-t border-slate-800/80">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-400">빠른 점수 증감:</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onUpdateScore(student.id, -1)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-700 text-xs font-bold"
+                        >
+                          -1점
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onUpdateScore(student.id, 1);
+                            soundManager.playScoreDing();
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-2xs"
+                        >
+                          +1점
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onUpdateScore(student.id, 2);
+                            soundManager.playScoreDing();
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-black shadow-2xs"
+                        >
+                          +2점
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onUpdateScore(student.id, 5);
+                            soundManager.playScoreDing();
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-black shadow-2xs"
+                        >
+                          +5점
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Direct Raise Input Row */}
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <span className="text-xs font-bold text-slate-300">
+                        원하는 점수 숫자로 입력하여 한번에 올리기:
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="1"
+                          max="999"
+                          value={directRaisePoints}
+                          onChange={(e) => setDirectRaisePoints(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const val = parseInt(directRaisePoints, 10);
+                              if (!isNaN(val) && val !== 0) {
+                                onUpdateScore(student.id, val);
+                                soundManager.playScoreDing();
+                              }
+                            }
+                          }}
+                          placeholder="점수"
+                          className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-amber-300 font-black text-center focus:outline-none focus:border-emerald-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = parseInt(directRaisePoints, 10);
+                            if (!isNaN(val) && val !== 0) {
+                              onUpdateScore(student.id, val);
+                              soundManager.playScoreDing();
+                            }
+                          }}
+                          className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-colors flex items-center gap-1 shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>
+                            {parseInt(directRaisePoints, 10) > 0 ? `+${parseInt(directRaisePoints, 10)}점 올리기` : '올리기'}
+                          </span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

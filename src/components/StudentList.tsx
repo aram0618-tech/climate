@@ -31,6 +31,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterClimate, setFilterClimate] = useState<string>('all');
   const [filterTeam, setFilterTeam] = useState<number | 'all'>('all');
+  const [defaultScoreStep, setDefaultScoreStep] = useState<number>(1);
 
   // Stats calculation
   const selectedCount = students.filter((s) => s.selectedCharacterId !== null).length;
@@ -136,6 +137,38 @@ export const StudentList: React.FC<StudentListProps> = ({
         </div>
       </div>
 
+      {/* Teacher Quick Preset Toolbar for Today's Score (선생님 오늘 올릴 점수 배점 툴바) */}
+      {currentUser.role === 'teacher' && (
+        <div className="bg-slate-900/90 rounded-2xl px-4 py-3 border border-emerald-900/50 shadow-sm mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span className="text-xs font-black text-slate-200">
+              오늘 활동 점수 배점 설정
+            </span>
+            <span className="hidden md:inline text-xs text-slate-400">
+              (각 학생 카드 옆 점수 입력 칸에 숫자를 쓰거나 아래 단추로 기본 올릴 점수를 한 번에 변경할 수 있습니다)
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-bold text-slate-400 mr-1">기본 배점:</span>
+            {[1, 2, 3, 5, 10].map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => setDefaultScoreStep(num)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${
+                  defaultScoreStep === num
+                    ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400/60 scale-105'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                }`}
+              >
+                +{num}점
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Student Cards Grid List */}
       <div className="space-y-3">
         {filteredStudents.length === 0 ? (
@@ -157,6 +190,7 @@ export const StudentList: React.FC<StudentListProps> = ({
               onUpdateScore={onUpdateScore}
               onMultiplyScore={onMultiplyScore}
               onClickCard={onClickStudent}
+              defaultScoreStep={defaultScoreStep}
             />
           ))
         )}

@@ -23,6 +23,7 @@ import { testFirebaseConnection } from './lib/firebase';
 import { ClimateCardTopList } from './components/ClimateCardTopList';
 import { StudentList } from './components/StudentList';
 import { QuizMissionTab } from './components/QuizMissionTab';
+import { HallOfFameTab } from './components/HallOfFameTab';
 import { LoginModal } from './components/LoginModal';
 import { ConfirmSelectionModal } from './components/ConfirmSelectionModal';
 import { StudentDetailModal } from './components/StudentDetailModal';
@@ -39,6 +40,7 @@ import {
   VolumeX,
   LayoutGrid,
   Trophy,
+  Crown,
   Clock,
   Lock,
 } from 'lucide-react';
@@ -47,8 +49,8 @@ export default function App() {
   const [students, setStudents] = useState<Student[]>(() => loadStoredStudents());
   const [currentUser, setCurrentUser] = useState<CurrentUser>(() => ({ role: 'guest' }));
 
-  // Tab State: 'cards' = 플레이어 카드 & 21명 학생 현황, 'quiz' = 기후 퀴즈 미션 & 정답 제출
-  const [activeTab, setActiveTab] = useState<'cards' | 'quiz'>('cards');
+  // Tab State: 'cards' = 플레이어 카드 & 21명 학생 현황, 'quiz' = 기후 퀴즈 미션 & 정답 제출, 'fame' = 기특이 명예의 전당 (1·2·3등)
+  const [activeTab, setActiveTab] = useState<'cards' | 'quiz' | 'fame'>('cards');
 
   // Quiz questions & submissions
   const [questions, setQuestions] = useState<QuizQuestion[]>(() => loadStoredQuestions());
@@ -680,11 +682,11 @@ export default function App() {
         </div>
 
         {/* TAB SWITCHER */}
-        <div className="max-w-7xl mx-auto mt-2.5 pt-2 flex items-center gap-2 border-t border-slate-800">
+        <div className="max-w-7xl mx-auto mt-2.5 pt-2 flex items-center gap-2 border-t border-slate-800 overflow-x-auto pb-1">
           <button
             type="button"
             onClick={() => setActiveTab('cards')}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 border ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 border whitespace-nowrap flex-shrink-0 ${
               activeTab === 'cards'
                 ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
                 : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800'
@@ -697,7 +699,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setActiveTab('quiz')}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 border relative ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 border relative whitespace-nowrap flex-shrink-0 ${
               activeTab === 'quiz'
                 ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
                 : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800'
@@ -710,6 +712,20 @@ export default function App() {
                 {activeSubmissionsCount}
               </span>
             )}
+          </button>
+
+          {/* User Request: 기후 퀴즈 미션 & 정답 제출 탭 옆에 아이들 점수 순위를 1,2,3등만 확인할 수 있는 '기특이 명예의 전당' 존 */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('fame')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 border whitespace-nowrap flex-shrink-0 ${
+              activeTab === 'fame'
+                ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 border-amber-300 shadow-md ring-2 ring-amber-400/40'
+                : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-amber-300'
+            }`}
+          >
+            <Crown className="w-4 h-4 text-amber-400" />
+            <span>기특이 명예의 전당 (1·2·3등)</span>
           </button>
         </div>
       </header>
@@ -740,7 +756,7 @@ export default function App() {
               onClickStudent={handleOpenStudentDetail}
             />
           </div>
-        ) : (
+        ) : activeTab === 'quiz' ? (
           /* TAB 2: CLIMATE QUIZ MISSION & SUBMISSIONS */
           <QuizMissionTab
             students={students}
@@ -754,6 +770,13 @@ export default function App() {
             onUpdateStudentScore={handleUpdateScore}
             onUpdateTeamScore={handleUpdateTeamScore}
             onToggleRevealAnswers={handleToggleRevealAnswers}
+          />
+        ) : (
+          /* TAB 3: 기특이 명예의 전당 (1,2,3등 전용 존) */
+          <HallOfFameTab
+            students={students}
+            currentUser={currentUser}
+            onSelectStudent={handleOpenStudentDetail}
           />
         )}
       </main>

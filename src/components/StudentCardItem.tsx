@@ -27,6 +27,7 @@ interface StudentCardItemProps {
   onUpdateScore: (studentId: number, delta: number) => void;
   onMultiplyScore?: (studentId: number, multiplier: number) => void;
   onClickCard?: (student: Student) => void;
+  defaultScoreStep?: number;
 }
 
 export const StudentCardItem: React.FC<StudentCardItemProps> = ({
@@ -40,15 +41,42 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
   onUpdateScore,
   onMultiplyScore,
   onClickCard,
+  defaultScoreStep = 1,
 }) => {
   const card: ClimateCard | null = getCardById(student.selectedCharacterId);
   const isLoggedInStudent = currentUser.studentId === student.id;
   const isTeacher = currentUser.role === 'teacher';
 
+  const [inputRaiseAmount, setInputRaiseAmount] = React.useState<string>(String(defaultScoreStep || 1));
+  const [recentAddedDelta, setRecentAddedDelta] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (typeof defaultScoreStep === 'number') {
+      setInputRaiseAmount(String(defaultScoreStep));
+    }
+  }, [defaultScoreStep]);
+
   const handleScoreChange = (e: React.MouseEvent, delta: number) => {
     e.stopPropagation();
     onUpdateScore(student.id, delta);
     soundManager.playScoreDing();
+  };
+
+  const handleRaiseScoreDirect = (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const delta = parseInt(inputRaiseAmount, 10);
+    if (isNaN(delta) || delta === 0) return;
+
+    onUpdateScore(student.id, delta);
+    soundManager.playScoreDing();
+
+    setRecentAddedDelta(delta);
+    setTimeout(() => {
+      setRecentAddedDelta(null);
+    }, 1500);
   };
 
   const handleDoubleScore = (e: React.MouseEvent) => {
@@ -415,7 +443,12 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
 
           {/* Teacher-Only Score Adjustment Controls (오직 선생님만 점수 추가/차감 가능) */}
           {currentUser.role === 'teacher' && (
-            <div className="flex items-center gap-1 pl-1 sm:border-l sm:border-slate-800" title="선생님 전용 점수 관리">
+            <div
+              className="flex items-center gap-1.5 pl-1.5 sm:border-l sm:border-slate-800"
+              title="선생님 전용 점수 관리"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Minus 1 Quick Penalty Button */}
               <button
                 type="button"
                 onClick={(e) => handleScoreChange(e, -1)}
@@ -424,14 +457,47 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
-              <button
-                type="button"
-                onClick={(e) => handleScoreChange(e, 1)}
-                title="1점 추가 (선생님 전용)"
-                className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-colors text-xs font-black shadow-2xs"
+
+              {/* Direct Score Input Box & Raise Button (점수 입력 칸에 숫자를 적어 한번에 올리기) */}
+              <div
+                className="flex items-center rounded-lg bg-slate-950 border border-slate-700 focus-within:border-emerald-500 overflow-hidden shadow-inner"
+                title="올릴 점수를 입력 후 올리기 버튼 또는 Enter를 누르세요"
               >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={inputRaiseAmount}
+                  onChange={(e) => setInputRaiseAmount(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleRaiseScoreDirect();
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="1"
+                  className="w-10 sm:w-12 h-7 bg-transparent px-1 text-xs text-center font-black text-emerald-300 placeholder-slate-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleRaiseScoreDirect}
+                  title={`${parseInt(inputRaiseAmount, 10) || 1}점 한번에 올리기`}
+                  className="h-7 px-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black text-xs flex items-center gap-0.5 transition-colors whitespace-nowrap shadow-2xs"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span className="text-[11px] font-black">
+                    {parseInt(inputRaiseAmount, 10) > 1 ? `+${parseInt(inputRaiseAmount, 10)}점` : '올리기'}
+                  </span>
+                </button>
+              </div>
+
+              {recentAddedDelta !== null && (
+                <span className="text-[11px] font-black text-emerald-400 animate-pulse whitespace-nowrap">
+                  +{recentAddedDelta}점!
+                </span>
+              )}
+
               {card?.id === 'jangbogo' && (
                 <button
                   type="button"
