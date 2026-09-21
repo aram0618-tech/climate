@@ -9,7 +9,6 @@ import {
   Award,
   Sparkles,
   Star,
-  Users,
   PartyPopper,
   Flame,
   CheckCircle2,
@@ -23,20 +22,11 @@ interface HallOfFameTabProps {
   onSelectStudent: (student: Student) => void;
 }
 
-type RankingCriteria = 'total' | 'today' | 'team';
+type RankingCriteria = 'total' | 'today';
 
 interface RankedStudent {
   rank: number;
   student: Student;
-  scoreValue: number;
-}
-
-interface RankedTeam {
-  rank: number;
-  teamNumber: number;
-  members: Student[];
-  totalScore: number;
-  todayScore: number;
   scoreValue: number;
 }
 
@@ -57,89 +47,48 @@ export const HallOfFameTab: React.FC<HallOfFameTabProps> = ({
     }, 3000);
   };
 
-  // Compute Student Rankings for Top 3
+  // Compute Student Rankings for Top 3 (Dense ranking so ties share the same rank and same horizontal line)
   const getRankedStudents = (): RankedStudent[] => {
-    // Sort students by selected criteria descending
-    const sorted = [...students].sort((a, b) => {
-      const valA = rankingCriteria === 'today' ? (a.todayScore || 0) : (a.score || 0);
-      const valB = rankingCriteria === 'today' ? (b.todayScore || 0) : (b.score || 0);
-      return valB - valA;
-    });
+    // Sort students by score descending, then by student number ascending
+    const scoredStudents = [...students]
+      .map((student) => ({
+        student,
+        scoreValue: rankingCriteria === 'today' ? (student.todayScore || 0) : (student.score || 0),
+      }))
+      .sort((a, b) => {
+        if (b.scoreValue !== a.scoreValue) {
+          return b.scoreValue - a.scoreValue;
+        }
+        return a.student.number - b.student.number;
+      });
+
+    const hasScoresAboveZero = scoredStudents.some((s) => s.scoreValue > 0);
+    // If any student has score > 0, rank students with positive score; otherwise keep all students with score 0
+    const candidateStudents = hasScoresAboveZero
+      ? scoredStudents.filter((s) => s.scoreValue > 0)
+      : scoredStudents;
+
+    // Get unique scores in descending order
+    const uniqueScores = Array.from(new Set(candidateStudents.map((s) => s.scoreValue)));
+    // Top 3 distinct scores: index 0 = 1위, index 1 = 2위, index 2 = 3위
+    const top3Scores = uniqueScores.slice(0, 3);
 
     const rankedList: RankedStudent[] = [];
-    let currentRank = 1;
-
-    for (let i = 0; i < sorted.length; i++) {
-      const student = sorted[i];
-      const scoreValue = rankingCriteria === 'today' ? (student.todayScore || 0) : (student.score || 0);
-
-      // Determine dense or standard ranking
-      if (i > 0) {
-        const prevScore = rankingCriteria === 'today' ? (sorted[i - 1].todayScore || 0) : (sorted[i - 1].score || 0);
-        if (scoreValue < prevScore) {
-          currentRank = i + 1;
-        }
-      }
-
-      // ONLY keep 1st, 2nd, and 3rd rank (사용자 명세: 1, 2, 3등만 확인)
-      if (currentRank <= 3) {
+    candidateStudents.forEach((item) => {
+      const rankIndex = top3Scores.indexOf(item.scoreValue);
+      if (rankIndex !== -1) {
         rankedList.push({
-          rank: currentRank,
-          student,
-          scoreValue,
+          rank: rankIndex + 1,
+          student: item.student,
+          scoreValue: item.scoreValue,
         });
       }
-    }
+    });
 
     return rankedList;
   };
 
-  // Compute Team Rankings for Top 3 (1모둠 ~ 5모둠)
-  const getRankedTeams = (): RankedTeam[] => {
-    const teamMap: Record<number, Student[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] };
-    students.forEach((s) => {
-      if (teamMap[s.teamNumber]) {
-        teamMap[s.teamNumber].push(s);
-      }
-    });
-
-    const teamList: RankedTeam[] = [1, 2, 3, 4, 5].map((teamNumber) => {
-      const members = teamMap[teamNumber] || [];
-      const totalScore = members.reduce((acc, m) => acc + (m.score || 0), 0);
-      const todayScore = members.reduce((acc, m) => acc + (m.todayScore || 0), 0);
-      const scoreValue = rankingCriteria === 'today' ? todayScore : totalScore;
-      return {
-        rank: 1,
-        teamNumber,
-        members,
-        totalScore,
-        todayScore,
-        scoreValue,
-      };
-    });
-
-    teamList.sort((a, b) => b.scoreValue - a.scoreValue);
-
-    const rankedTeams: RankedTeam[] = [];
-    let currentRank = 1;
-    for (let i = 0; i < teamList.length; i++) {
-      const team = teamList[i];
-      if (i > 0 && team.scoreValue < teamList[i - 1].scoreValue) {
-        currentRank = i + 1;
-      }
-      if (currentRank <= 3) {
-        rankedTeams.push({
-          ...team,
-          rank: currentRank,
-        });
-      }
-    }
-
-    return rankedTeams;
-  };
-
   const rankedStudents = getRankedStudents();
-  const rankedTeams = getRankedTeams();
 
   // Find students by exact rank
   const firstRank = rankedStudents.filter((r) => r.rank === 1);
@@ -171,6 +120,103 @@ export const HallOfFameTab: React.FC<HallOfFameTabProps> = ({
       default:
         return '환경을 사랑하는 우리 반 멋진 기특이입니다!';
     }
+  };
+
+  // Render an honorary card for Top 3
+  const renderHonoraryCard = (item: RankedStudent) => {
+    const card = getCardById(item.student.selectedCharacterId);
+    const isFirst = item.rank === 1;
+    const isSecond = item.rank === 2;
+
+    return (
+      <div
+        key={item.student.id}
+        onClick={() => onSelectStudent(item.student)}
+        className={`rounded-2xl p-5 border cursor-pointer transition-all transform hover:-translate-y-1 shadow-lg relative overflow-hidden ${
+          isFirst
+            ? 'bg-gradient-to-b from-slate-900 to-amber-950/40 border-amber-400/80 ring-1 ring-amber-400/30'
+            : isSecond
+            ? 'bg-gradient-to-b from-slate-900 to-slate-950 border-slate-500'
+            : 'bg-gradient-to-b from-slate-900 to-amber-950/20 border-amber-800'
+        }`}
+      >
+        {/* Rank Pill */}
+        <div className="flex items-center justify-between mb-3">
+          <span
+            className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm ${
+              isFirst
+                ? 'bg-amber-500 text-slate-950'
+                : isSecond
+                ? 'bg-slate-300 text-slate-950'
+                : 'bg-amber-700 text-white'
+            }`}
+          >
+            {isFirst ? <Crown className="w-3.5 h-3.5" /> : <Medal className="w-3.5 h-3.5" />}
+            <span>{item.rank}위 ({isFirst ? '금' : isSecond ? '은' : '동'}메달)</span>
+          </span>
+
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-bold">
+            {item.student.teamNumber}모둠
+          </span>
+        </div>
+
+        {/* Student & Character Block */}
+        <div className="flex items-center gap-3.5 mb-4">
+          <div
+            className={`w-14 h-14 rounded-2xl p-0.5 border-2 flex-shrink-0 flex items-center justify-center overflow-hidden ${
+              isFirst
+                ? 'border-amber-400 bg-amber-950/50'
+                : isSecond
+                ? 'border-slate-400 bg-slate-800'
+                : 'border-amber-700 bg-amber-950/30'
+            }`}
+          >
+            <CharacterAvatar
+              characterId={item.student.selectedCharacterId}
+              size="sm"
+            />
+          </div>
+          <div>
+            <h4 className="text-base font-black text-white flex items-center gap-1.5">
+              <span>{item.student.number}번 {item.student.name}</span>
+            </h4>
+            <p className="text-xs font-bold text-amber-300 mt-0.5">
+              {getRankTitle(item.rank)}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              캐릭터: {card ? card.name : '미선택'} ({card?.climate || '기후 없음'})
+            </p>
+          </div>
+        </div>
+
+        {/* Scores Breakdown */}
+        <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 mb-3">
+          <div className="text-center">
+            <span className="text-[10px] text-slate-400 block">오늘 획득 점수</span>
+            <span className="text-sm font-black text-emerald-400">
+              +{item.student.todayScore || 0}점
+            </span>
+          </div>
+          <div className="text-center border-l border-slate-800">
+            <span className="text-[10px] text-slate-400 block">누적 총계 점수</span>
+            <span className="text-sm font-black text-amber-400">
+              {item.student.score || 0}점
+            </span>
+          </div>
+        </div>
+
+        {/* Praise Commentary */}
+        <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/80">
+          "{getRankCommentary(item.rank)}"
+        </p>
+
+        <div className="mt-3 text-right">
+          <span className="text-[11px] font-bold text-amber-400 hover:underline">
+            상세 카드 보기 →
+          </span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -239,19 +285,6 @@ export const HallOfFameTab: React.FC<HallOfFameTabProps> = ({
               <Sparkles className="w-3.5 h-3.5" />
               <span>오늘 획득 점수 순위 (1·2·3등)</span>
             </button>
-
-            <button
-              type="button"
-              onClick={() => setRankingCriteria('team')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
-                rankingCriteria === 'team'
-                  ? 'bg-indigo-500 text-white shadow-md scale-102'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>모둠 순위 (1·2·3등)</span>
-            </button>
           </div>
 
           <span className="text-xs text-slate-400 flex items-center gap-1">
@@ -272,403 +305,292 @@ export const HallOfFameTab: React.FC<HallOfFameTabProps> = ({
         </div>
       )}
 
-      {/* MODE 1 & 2: STUDENT RANKINGS (INDIVIDUAL TOP 3) */}
-      {rankingCriteria !== 'team' && (
-        <div>
-          {rankedStudents.length === 0 ? (
-            <div className="p-12 text-center bg-slate-900 rounded-3xl border border-slate-800 text-slate-400">
-              <Trophy className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-              <p className="text-base font-bold text-slate-200 mb-1">
-                아직 명예의 전당에 등록된 점수가 없습니다.
-              </p>
-              <p className="text-xs">
-                수업 활동과 퀴즈 미션에 참여하여 첫 번째 1·2·3등의 주인공이 되어보세요!
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* SECTION A: PODIUM STAGE (1등 가운데, 2등 왼쪽, 3등 오른쪽) */}
-              <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-6 md:p-10 mb-8 shadow-xl">
-                <div className="text-center mb-8">
-                  <h3 className="text-lg sm:text-xl font-black text-white flex items-center justify-center gap-2">
-                    <Medal className="w-5 h-5 text-amber-400" />
-                    <span>영예의 시상대 (Top 3 Podium)</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {rankingCriteria === 'today' ? '오늘 획득 점수' : '누적 총계 점수'} 기준 상위 3위 입상자
-                  </p>
-                </div>
-
-                {/* PODIUM COLUMNS */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end max-w-4xl mx-auto">
-                  {/* 2ND PLACE (SILVER - LEFT) */}
-                  <div className="order-2 md:order-1 flex flex-col items-center">
-                    {secondRank.length > 0 ? (
-                      secondRank.map((item) => {
-                        const card = getCardById(item.student.selectedCharacterId);
-                        return (
-                          <div
-                            key={item.student.id}
-                            onClick={() => onSelectStudent(item.student)}
-                            className="w-full flex flex-col items-center cursor-pointer group"
-                            title="클릭하여 캐릭터 카드 상세 보기"
-                          >
-                            {/* Silver Badge */}
-                            <div className="mb-2 flex items-center gap-1 px-3 py-1 rounded-full bg-slate-800 border border-slate-600 text-slate-200 text-xs font-black shadow-md group-hover:border-slate-400 transition-colors">
-                              <Medal className="w-4 h-4 text-slate-300" />
-                              <span>🥈 2위 (은메달)</span>
-                            </div>
-
-                            {/* Avatar */}
-                            <div className="relative mb-3 transform group-hover:scale-105 transition-transform">
-                              <div className="w-20 h-20 rounded-2xl bg-slate-800 border-2 border-slate-400 p-1 shadow-lg overflow-hidden flex items-center justify-center">
-                                <CharacterAvatar
-                                  characterId={item.student.selectedCharacterId}
-                                  size="md"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Student Info */}
-                            <span className="text-sm font-black text-white group-hover:text-slate-200">
-                              {item.student.number}번 {item.student.name}
-                            </span>
-                            <span className="text-xs text-slate-400 font-bold mt-0.5">
-                              {card ? card.name : '미선택'} ({item.student.teamNumber}모둠)
-                            </span>
-
-                            {/* Score Display */}
-                            <div className="mt-2 px-3 py-1 rounded-xl bg-slate-800 text-slate-200 font-black text-sm border border-slate-700">
-                              {item.scoreValue}점
-                            </div>
-
-                            {/* Podium Stand */}
-                            <div className="w-full h-32 mt-4 bg-gradient-to-b from-slate-800 to-slate-950 rounded-t-2xl border-t-4 border-slate-400 flex flex-col items-center justify-center shadow-inner">
-                              <span className="text-2xl font-black text-slate-300">2</span>
-                              <span className="text-[11px] font-bold text-slate-400">SILVER</span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="w-full text-center py-8 text-xs text-slate-600">
-                        2위 해당 없음
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 1ST PLACE (GOLD - CENTER HIGHEST) */}
-                  <div className="order-1 md:order-2 flex flex-col items-center">
-                    {firstRank.length > 0 ? (
-                      firstRank.map((item) => {
-                        const card = getCardById(item.student.selectedCharacterId);
-                        return (
-                          <div
-                            key={item.student.id}
-                            onClick={() => onSelectStudent(item.student)}
-                            className="w-full flex flex-col items-center cursor-pointer group"
-                            title="클릭하여 캐릭터 카드 상세 보기"
-                          >
-                            {/* Gold Crown Floating */}
-                            <div className="mb-2 flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 text-xs font-black shadow-lg animate-pulse group-hover:bg-amber-500/30 transition-colors">
-                              <Crown className="w-4 h-4 text-amber-400" />
-                              <span>🥇 1위 (금메달)</span>
-                            </div>
-
-                            {/* Avatar with Golden Ring */}
-                            <div className="relative mb-3 transform group-hover:scale-105 transition-transform">
-                              <div className="w-24 h-24 rounded-2xl bg-slate-800 border-4 border-amber-400 p-1 shadow-[0_0_20px_rgba(251,191,36,0.35)] overflow-hidden flex items-center justify-center">
-                                <CharacterAvatar
-                                  characterId={item.student.selectedCharacterId}
-                                  size="md"
-                                />
-                              </div>
-                              <div className="absolute -top-2 -right-2 p-1.5 rounded-full bg-amber-500 text-slate-950 shadow-md">
-                                <Sparkles className="w-3.5 h-3.5" />
-                              </div>
-                            </div>
-
-                            {/* Student Info */}
-                            <span className="text-base font-black text-amber-300 group-hover:text-amber-200">
-                              {item.student.number}번 {item.student.name}
-                            </span>
-                            <span className="text-xs text-amber-200/80 font-bold mt-0.5">
-                              {card ? card.name : '미선택'} ({item.student.teamNumber}모둠)
-                            </span>
-
-                            {/* Score Display */}
-                            <div className="mt-2 px-4 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black text-base shadow-md">
-                              {item.scoreValue}점
-                            </div>
-
-                            {/* Podium Stand */}
-                            <div className="w-full h-44 mt-4 bg-gradient-to-b from-amber-600/30 via-slate-900 to-slate-950 rounded-t-2xl border-t-4 border-amber-400 flex flex-col items-center justify-center shadow-[inset_0_4px_12px_rgba(251,191,36,0.2)]">
-                              <Crown className="w-6 h-6 text-amber-400 mb-1" />
-                              <span className="text-3xl font-black text-amber-400">1</span>
-                              <span className="text-xs font-black text-amber-300">CHAMPION</span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="w-full text-center py-8 text-xs text-slate-600">
-                        1위 해당 없음
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 3RD PLACE (BRONZE - RIGHT) */}
-                  <div className="order-3 md:order-3 flex flex-col items-center">
-                    {thirdRank.length > 0 ? (
-                      thirdRank.map((item) => {
-                        const card = getCardById(item.student.selectedCharacterId);
-                        return (
-                          <div
-                            key={item.student.id}
-                            onClick={() => onSelectStudent(item.student)}
-                            className="w-full flex flex-col items-center cursor-pointer group"
-                            title="클릭하여 캐릭터 카드 상세 보기"
-                          >
-                            {/* Bronze Badge */}
-                            <div className="mb-2 flex items-center gap-1 px-3 py-1 rounded-full bg-amber-950/70 border border-amber-800 text-amber-300 text-xs font-black shadow-md group-hover:border-amber-600 transition-colors">
-                              <Medal className="w-4 h-4 text-amber-500" />
-                              <span>🥉 3위 (동메달)</span>
-                            </div>
-
-                            {/* Avatar */}
-                            <div className="relative mb-3 transform group-hover:scale-105 transition-transform">
-                              <div className="w-18 h-18 rounded-2xl bg-slate-800 border-2 border-amber-700 p-1 shadow-md overflow-hidden flex items-center justify-center">
-                                <CharacterAvatar
-                                  characterId={item.student.selectedCharacterId}
-                                  size="md"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Student Info */}
-                            <span className="text-sm font-black text-white group-hover:text-slate-200">
-                              {item.student.number}번 {item.student.name}
-                            </span>
-                            <span className="text-xs text-slate-400 font-bold mt-0.5">
-                              {card ? card.name : '미선택'} ({item.student.teamNumber}모둠)
-                            </span>
-
-                            {/* Score Display */}
-                            <div className="mt-2 px-3 py-1 rounded-xl bg-amber-950 text-amber-300 font-black text-sm border border-amber-800">
-                              {item.scoreValue}점
-                            </div>
-
-                            {/* Podium Stand */}
-                            <div className="w-full h-24 mt-4 bg-gradient-to-b from-slate-800 to-slate-950 rounded-t-2xl border-t-4 border-amber-700 flex flex-col items-center justify-center shadow-inner">
-                              <span className="text-xl font-black text-amber-600">3</span>
-                              <span className="text-[11px] font-bold text-amber-600">BRONZE</span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="w-full text-center py-8 text-xs text-slate-600">
-                        3위 해당 없음
-                      </div>
-                    )}
-                  </div>
-                </div>
+      {/* STUDENT RANKINGS (INDIVIDUAL TOP 3) */}
+      <div>
+        {rankedStudents.length === 0 ? (
+          <div className="p-12 text-center bg-slate-900 rounded-3xl border border-slate-800 text-slate-400">
+            <Trophy className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+            <p className="text-base font-bold text-slate-200 mb-1">
+              아직 명예의 전당에 등록된 점수가 없습니다.
+            </p>
+            <p className="text-xs">
+              수업 활동과 퀴즈 미션에 참여하여 첫 번째 1·2·3등의 주인공이 되어보세요!
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* SECTION A: PODIUM STAGE (1등 가운데, 2등 왼쪽, 3등 오른쪽) */}
+            <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-6 md:p-10 mb-8 shadow-xl">
+              <div className="text-center mb-8">
+                <h3 className="text-lg sm:text-xl font-black text-white flex items-center justify-center gap-2">
+                  <Medal className="w-5 h-5 text-amber-400" />
+                  <span>영예의 시상대 (Top 3 Podium)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  {rankingCriteria === 'today' ? '오늘 획득 점수' : '누적 총계 점수'} 기준 상위 3위 입상자
+                </p>
               </div>
 
-              {/* SECTION B: DETAILED TOP 3 HONORARY HALL OF FAME CARDS */}
-              <div className="space-y-4">
+              {/* PODIUM COLUMNS: Silver (left), Gold (center highest), Bronze (right). Same score students are placed horizontally side-by-side! */}
+              <div className="flex flex-col md:flex-row items-end justify-center gap-6 max-w-5xl mx-auto">
+                {/* 2ND PLACE (SILVER - LEFT) */}
+                <div className="order-2 md:order-1 flex flex-col items-center flex-1 min-w-[220px] w-full">
+                  {secondRank.length > 0 ? (
+                    <div className="w-full flex flex-col items-center">
+                      {/* Silver Badge */}
+                      <div className="mb-3 flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-slate-800 border border-slate-600 text-slate-200 text-xs font-black shadow-md">
+                        <Medal className="w-4 h-4 text-slate-300" />
+                        <span>🥈 2위 (은메달){secondRank.length > 1 ? ` · 공동 ${secondRank.length}명` : ''}</span>
+                      </div>
+
+                      {/* Same score students horizontally aligned side-by-side on the same line */}
+                      <div className="w-full flex flex-row flex-wrap items-end justify-center gap-3 sm:gap-4 mb-3">
+                        {secondRank.map((item) => {
+                          const card = getCardById(item.student.selectedCharacterId);
+                          return (
+                            <div
+                              key={item.student.id}
+                              onClick={() => onSelectStudent(item.student)}
+                              className="flex flex-col items-center cursor-pointer group p-1 transition-transform hover:scale-105"
+                              title="클릭하여 캐릭터 카드 상세 보기"
+                            >
+                              {/* Avatar */}
+                              <div className="relative mb-2">
+                                <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-2xl bg-slate-800 border-2 border-slate-400 p-1 shadow-lg overflow-hidden flex items-center justify-center">
+                                  <CharacterAvatar
+                                    characterId={item.student.selectedCharacterId}
+                                    size="md"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Student Info */}
+                              <span className="text-xs sm:text-sm font-black text-white group-hover:text-slate-200 text-center whitespace-nowrap">
+                                {item.student.number}번 {item.student.name}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-bold mt-0.5 text-center">
+                                {card ? card.name : '미선택'} ({item.student.teamNumber}모둠)
+                              </span>
+
+                              {/* Score Display */}
+                              <div className="mt-1.5 px-3 py-1 rounded-xl bg-slate-800 text-slate-200 font-black text-xs sm:text-sm border border-slate-700">
+                                {item.scoreValue}점
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Silver Podium Stand */}
+                      <div className="w-full h-28 sm:h-32 bg-gradient-to-b from-slate-800 to-slate-950 rounded-t-2xl border-t-4 border-slate-400 flex flex-col items-center justify-center shadow-inner">
+                        <span className="text-2xl font-black text-slate-300">2</span>
+                        <span className="text-[11px] font-bold text-slate-400">
+                          {secondRank.length > 1 ? `SILVER (${secondRank.length}명)` : 'SILVER'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full text-center py-8 text-xs text-slate-600 bg-slate-950/40 rounded-2xl border border-slate-800/60">
+                      2위 해당 없음
+                    </div>
+                  )}
+                </div>
+
+                {/* 1ST PLACE (GOLD - CENTER HIGHEST) */}
+                <div className="order-1 md:order-2 flex flex-col items-center flex-1 min-w-[240px] w-full">
+                  {firstRank.length > 0 ? (
+                    <div className="w-full flex flex-col items-center">
+                      {/* Gold Crown Badge */}
+                      <div className="mb-3 flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 text-xs font-black shadow-lg animate-pulse">
+                        <Crown className="w-4 h-4 text-amber-400" />
+                        <span>🥇 1위 (금메달){firstRank.length > 1 ? ` · 공동 ${firstRank.length}명` : ''}</span>
+                      </div>
+
+                      {/* Same score students horizontally aligned side-by-side on the same line */}
+                      <div className="w-full flex flex-row flex-wrap items-end justify-center gap-3 sm:gap-4 mb-3">
+                        {firstRank.map((item) => {
+                          const card = getCardById(item.student.selectedCharacterId);
+                          return (
+                            <div
+                              key={item.student.id}
+                              onClick={() => onSelectStudent(item.student)}
+                              className="flex flex-col items-center cursor-pointer group p-1 transition-transform hover:scale-105"
+                              title="클릭하여 캐릭터 카드 상세 보기"
+                            >
+                              {/* Avatar with Golden Ring */}
+                              <div className="relative mb-2">
+                                <div className="w-20 sm:w-24 h-20 sm:h-24 rounded-2xl bg-slate-800 border-4 border-amber-400 p-1 shadow-[0_0_20px_rgba(251,191,36,0.35)] overflow-hidden flex items-center justify-center">
+                                  <CharacterAvatar
+                                    characterId={item.student.selectedCharacterId}
+                                    size="md"
+                                  />
+                                </div>
+                                <div className="absolute -top-2 -right-2 p-1.5 rounded-full bg-amber-500 text-slate-950 shadow-md">
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                </div>
+                              </div>
+
+                              {/* Student Info */}
+                              <span className="text-sm sm:text-base font-black text-amber-300 group-hover:text-amber-200 text-center whitespace-nowrap">
+                                {item.student.number}번 {item.student.name}
+                              </span>
+                              <span className="text-xs text-amber-200/80 font-bold mt-0.5 text-center">
+                                {card ? card.name : '미선택'} ({item.student.teamNumber}모둠)
+                              </span>
+
+                              {/* Score Display */}
+                              <div className="mt-1.5 px-3.5 py-1 rounded-xl bg-amber-500 text-slate-950 font-black text-xs sm:text-sm shadow-md">
+                                {item.scoreValue}점
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Gold Champion Podium Stand */}
+                      <div className="w-full h-36 sm:h-44 bg-gradient-to-b from-amber-600/30 via-slate-900 to-slate-950 rounded-t-2xl border-t-4 border-amber-400 flex flex-col items-center justify-center shadow-[inset_0_4px_16px_rgba(251,191,36,0.25)]">
+                        <Crown className="w-6 h-6 text-amber-400 mb-1" />
+                        <span className="text-3xl font-black text-amber-400">1</span>
+                        <span className="text-xs font-black text-amber-300">
+                          {firstRank.length > 1 ? `CHAMPIONS (${firstRank.length}명)` : 'CHAMPION'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full text-center py-8 text-xs text-slate-600 bg-slate-950/40 rounded-2xl border border-slate-800/60">
+                      1위 해당 없음
+                    </div>
+                  )}
+                </div>
+
+                {/* 3RD PLACE (BRONZE - RIGHT) */}
+                <div className="order-3 md:order-3 flex flex-col items-center flex-1 min-w-[220px] w-full">
+                  {thirdRank.length > 0 ? (
+                    <div className="w-full flex flex-col items-center">
+                      {/* Bronze Badge */}
+                      <div className="mb-3 flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-amber-950/70 border border-amber-800 text-amber-300 text-xs font-black shadow-md">
+                        <Medal className="w-4 h-4 text-amber-500" />
+                        <span>🥉 3위 (동메달){thirdRank.length > 1 ? ` · 공동 ${thirdRank.length}명` : ''}</span>
+                      </div>
+
+                      {/* Same score students horizontally aligned side-by-side on the same line */}
+                      <div className="w-full flex flex-row flex-wrap items-end justify-center gap-3 sm:gap-4 mb-3">
+                        {thirdRank.map((item) => {
+                          const card = getCardById(item.student.selectedCharacterId);
+                          return (
+                            <div
+                              key={item.student.id}
+                              onClick={() => onSelectStudent(item.student)}
+                              className="flex flex-col items-center cursor-pointer group p-1 transition-transform hover:scale-105"
+                              title="클릭하여 캐릭터 카드 상세 보기"
+                            >
+                              {/* Avatar */}
+                              <div className="relative mb-2">
+                                <div className="w-14 sm:w-18 h-14 sm:h-18 rounded-2xl bg-slate-800 border-2 border-amber-700 p-1 shadow-md overflow-hidden flex items-center justify-center">
+                                  <CharacterAvatar
+                                    characterId={item.student.selectedCharacterId}
+                                    size="md"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Student Info */}
+                              <span className="text-xs sm:text-sm font-black text-white group-hover:text-slate-200 text-center whitespace-nowrap">
+                                {item.student.number}번 {item.student.name}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-bold mt-0.5 text-center">
+                                {card ? card.name : '미선택'} ({item.student.teamNumber}모둠)
+                              </span>
+
+                              {/* Score Display */}
+                              <div className="mt-1.5 px-3 py-1 rounded-xl bg-amber-950 text-amber-300 font-black text-xs sm:text-sm border border-amber-800">
+                                {item.scoreValue}점
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Bronze Podium Stand */}
+                      <div className="w-full h-20 sm:h-24 bg-gradient-to-b from-slate-800 to-slate-950 rounded-t-2xl border-t-4 border-amber-700 flex flex-col items-center justify-center shadow-inner">
+                        <span className="text-xl font-black text-amber-600">3</span>
+                        <span className="text-[11px] font-bold text-amber-600">
+                          {thirdRank.length > 1 ? `BRONZE (${thirdRank.length}명)` : 'BRONZE'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full text-center py-8 text-xs text-slate-600 bg-slate-950/40 rounded-2xl border border-slate-800/60">
+                      3위 해당 없음
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION B: DETAILED TOP 3 HONORARY HALL OF FAME CARDS (Grouped by Rank/Score so same score students sit horizontally on the same line) */}
+            <div className="space-y-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                   <Award className="w-5 h-5 text-amber-400" />
                   <span>기특이 명예의 전당 헌액자 상세 소개 (1·2·3등)</span>
                 </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {rankedStudents.map((item) => {
-                    const card = getCardById(item.student.selectedCharacterId);
-                    const isFirst = item.rank === 1;
-                    const isSecond = item.rank === 2;
-
-                    return (
-                      <div
-                        key={item.student.id}
-                        onClick={() => onSelectStudent(item.student)}
-                        className={`rounded-2xl p-5 border cursor-pointer transition-all transform hover:-translate-y-1 shadow-lg relative overflow-hidden ${
-                          isFirst
-                            ? 'bg-gradient-to-b from-slate-900 to-amber-950/40 border-amber-400/80 ring-1 ring-amber-400/30'
-                            : isSecond
-                            ? 'bg-gradient-to-b from-slate-900 to-slate-950 border-slate-500'
-                            : 'bg-gradient-to-b from-slate-900 to-amber-950/20 border-amber-800'
-                        }`}
-                      >
-                        {/* Rank Pill */}
-                        <div className="flex items-center justify-between mb-3">
-                          <span
-                            className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm ${
-                              isFirst
-                                ? 'bg-amber-500 text-slate-950'
-                                : isSecond
-                                ? 'bg-slate-300 text-slate-950'
-                                : 'bg-amber-700 text-white'
-                            }`}
-                          >
-                            {isFirst ? <Crown className="w-3.5 h-3.5" /> : <Medal className="w-3.5 h-3.5" />}
-                            <span>{item.rank}위 ({isFirst ? '금' : isSecond ? '은' : '동'}메달)</span>
-                          </span>
-
-                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-bold">
-                            {item.student.teamNumber}모둠
-                          </span>
-                        </div>
-
-                        {/* Student & Character Block */}
-                        <div className="flex items-center gap-3.5 mb-4">
-                          <div
-                            className={`w-14 h-14 rounded-2xl p-0.5 border-2 flex-shrink-0 flex items-center justify-center overflow-hidden ${
-                              isFirst
-                                ? 'border-amber-400 bg-amber-950/50'
-                                : isSecond
-                                ? 'border-slate-400 bg-slate-800'
-                                : 'border-amber-700 bg-amber-950/30'
-                            }`}
-                          >
-                            <CharacterAvatar
-                              characterId={item.student.selectedCharacterId}
-                              size="sm"
-                            />
-                          </div>
-                          <div>
-                            <h4 className="text-base font-black text-white flex items-center gap-1.5">
-                              <span>{item.student.number}번 {item.student.name}</span>
-                            </h4>
-                            <p className="text-xs font-bold text-amber-300 mt-0.5">
-                              {getRankTitle(item.rank)}
-                            </p>
-                            <p className="text-[11px] text-slate-400">
-                              캐릭터: {card ? card.name : '미선택'} ({card?.climate || '기후 없음'})
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Scores Breakdown */}
-                        <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 mb-3">
-                          <div className="text-center">
-                            <span className="text-[10px] text-slate-400 block">오늘 획득 점수</span>
-                            <span className="text-sm font-black text-emerald-400">
-                              +{item.student.todayScore || 0}점
-                            </span>
-                          </div>
-                          <div className="text-center border-l border-slate-800">
-                            <span className="text-[10px] text-slate-400 block">누적 총계 점수</span>
-                            <span className="text-sm font-black text-amber-400">
-                              {item.student.score || 0}점
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Praise Commentary */}
-                        <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/80">
-                          "{getRankCommentary(item.rank)}"
-                        </p>
-
-                        <div className="mt-3 text-right">
-                          <span className="text-[11px] font-bold text-amber-400 hover:underline">
-                            상세 카드 보기 →
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <span className="text-xs text-slate-400 font-medium">
+                  * 동일 점수 수상자는 가로로 같은 선상에 나란히 배치됩니다.
+                </span>
               </div>
-            </>
-          )}
-        </div>
-      )}
 
-      {/* MODE 3: TEAM RANKINGS (TOP 3 TEAMS ONLY) */}
-      {rankingCriteria === 'team' && (
-        <div>
-          <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6 md:p-8 shadow-xl mb-6">
-            <div className="text-center mb-6">
-              <h3 className="text-lg sm:text-xl font-black text-white flex items-center justify-center gap-2">
-                <Users className="w-5 h-5 text-indigo-400" />
-                <span>모둠 명예의 전당 (1·2·3등 모둠)</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                협동과 팀워크로 기후 미션을 완수한 상위 3개 모둠
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {rankedTeams.map((team) => {
-                const isFirst = team.rank === 1;
-                const isSecond = team.rank === 2;
-
-                return (
-                  <div
-                    key={team.teamNumber}
-                    className={`rounded-2xl p-5 border shadow-lg ${
-                      isFirst
-                        ? 'bg-gradient-to-b from-slate-900 to-amber-950/40 border-amber-400'
-                        : isSecond
-                        ? 'bg-gradient-to-b from-slate-900 to-slate-950 border-slate-500'
-                        : 'bg-gradient-to-b from-slate-900 to-indigo-950/30 border-amber-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span
-                        className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1 ${
-                          isFirst
-                            ? 'bg-amber-500 text-slate-950'
-                            : isSecond
-                            ? 'bg-slate-300 text-slate-950'
-                            : 'bg-amber-700 text-white'
-                        }`}
-                      >
-                        {isFirst ? <Crown className="w-3.5 h-3.5" /> : <Medal className="w-3.5 h-3.5" />}
-                        <span>모둠 {team.rank}위 ({isFirst ? '금' : isSecond ? '은' : '동'})</span>
-                      </span>
-
-                      <span className="text-base font-black text-white">
-                        {team.teamNumber}모둠
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 mb-3 space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400">모둠 합산 점수:</span>
-                        <span className="text-base font-black text-amber-400">{team.totalScore}점</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400">오늘 획득 점수:</span>
-                        <span className="text-sm font-black text-emerald-400">+{team.todayScore}점</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-400 block mb-1.5">
-                        모둠원 ({team.members.length}명):
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {team.members.map((member) => (
-                          <button
-                            key={member.id}
-                            type="button"
-                            onClick={() => onSelectStudent(member)}
-                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors"
-                          >
-                            {member.number}번 {member.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+              {/* 1위 그룹 (금메달) - 동점자 가로 동일 선상 배치 */}
+              {firstRank.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-3.5 py-1 rounded-xl text-xs font-black bg-amber-500/20 border border-amber-400/50 text-amber-300 flex items-center gap-1.5 shadow-sm">
+                      <Crown className="w-3.5 h-3.5 text-amber-400" />
+                      <span>🥇 1위 (금메달) · {firstRank[0]?.scoreValue}점{firstRank.length > 1 ? ` (공동 ${firstRank.length}명)` : ''}</span>
+                    </span>
+                    <div className="h-px bg-slate-800 flex-1" />
                   </div>
-                );
-              })}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {firstRank.map(renderHonoraryCard)}
+                  </div>
+                </div>
+              )}
+
+              {/* 2위 그룹 (은메달) - 동점자 가로 동일 선상 배치 */}
+              {secondRank.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-3.5 py-1 rounded-xl text-xs font-black bg-slate-800 border border-slate-600 text-slate-200 flex items-center gap-1.5 shadow-sm">
+                      <Medal className="w-3.5 h-3.5 text-slate-300" />
+                      <span>🥈 2위 (은메달) · {secondRank[0]?.scoreValue}점{secondRank.length > 1 ? ` (공동 ${secondRank.length}명)` : ''}</span>
+                    </span>
+                    <div className="h-px bg-slate-800 flex-1" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {secondRank.map(renderHonoraryCard)}
+                  </div>
+                </div>
+              )}
+
+              {/* 3위 그룹 (동메달) - 동점자 가로 동일 선상 배치 */}
+              {thirdRank.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-3.5 py-1 rounded-xl text-xs font-black bg-amber-950/60 border border-amber-800 text-amber-300 flex items-center gap-1.5 shadow-sm">
+                      <Medal className="w-3.5 h-3.5 text-amber-500" />
+                      <span>🥉 3위 (동메달) · {thirdRank[0]?.scoreValue}점{thirdRank.length > 1 ? ` (공동 ${thirdRank.length}명)` : ''}</span>
+                    </span>
+                    <div className="h-px bg-slate-800 flex-1" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {thirdRank.map(renderHonoraryCard)}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {/* CLASSROOM ENCOURAGEMENT FOOTER */}
       <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 text-center">
