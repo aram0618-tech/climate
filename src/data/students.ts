@@ -43,6 +43,7 @@ export function loadStoredStudents(): Student[] {
         hiddenAbilityPending: Boolean(s.hiddenAbilityPending),
         score: typeof s.score === 'number' ? s.score : 0,
         todayScore: typeof s.todayScore === 'number' ? s.todayScore : 0,
+        missionScores: s.missionScores && typeof s.missionScores === 'object' ? s.missionScores : {},
         teamNumber: s.teamNumber || INITIAL_STUDENTS[idx].teamNumber,
       }));
     }

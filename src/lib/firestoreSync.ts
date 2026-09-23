@@ -31,6 +31,7 @@ export function sanitizeStudent(s: Student): Record<string, any> {
     hiddenAbilityPending: Boolean(s.hiddenAbilityPending),
     score: typeof s.score === 'number' && !isNaN(s.score) ? Math.max(0, s.score) : 0,
     todayScore: typeof s.todayScore === 'number' && !isNaN(s.todayScore) ? Math.max(0, s.todayScore) : 0,
+    missionScores: s.missionScores && typeof s.missionScores === 'object' ? s.missionScores : {},
     selectedAt: s.selectedAt ? String(s.selectedAt) : null,
     teamNumber: Number(s.teamNumber || 1),
   };
@@ -121,6 +122,7 @@ export function subscribeStudents(onUpdate: (students: Student[]) => void) {
                 hiddenAbilityPending: Boolean(live.hiddenAbilityPending),
                 todayScore: typeof live.todayScore === 'number' ? live.todayScore : 0,
                 score: typeof live.score === 'number' ? live.score : 0,
+                missionScores: live.missionScores && typeof live.missionScores === 'object' ? live.missionScores : {},
               };
             }
             return base;

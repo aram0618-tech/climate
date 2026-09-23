@@ -28,6 +28,25 @@ export interface ClimateCard {
   lore: string;
 }
 
+export type MissionId = 'today' | 'mission1' | 'mission2' | 'mission3' | 'mission4' | 'mission5' | 'mission6';
+
+export interface MissionDef {
+  id: MissionId;
+  label: string;
+  shortLabel: string;
+  badge: string;
+  description: string;
+}
+
+export const MISSIONS_LIST: MissionDef[] = [
+  { id: 'mission1', label: '미션 1', shortLabel: 'M1', badge: '🎯', description: '1번째 탐험 미션' },
+  { id: 'mission2', label: '미션 2', shortLabel: 'M2', badge: '🎯', description: '2번째 탐험 미션' },
+  { id: 'mission3', label: '미션 3', shortLabel: 'M3', badge: '🎯', description: '3번째 탐험 미션' },
+  { id: 'mission4', label: '미션 4', shortLabel: 'M4', badge: '🎯', description: '4번째 탐험 미션' },
+  { id: 'mission5', label: '미션 5', shortLabel: 'M5', badge: '🎯', description: '5번째 탐험 미션' },
+  { id: 'mission6', label: '미션 6', shortLabel: 'M6', badge: '🎯', description: '6번째 탐험 미션' },
+];
+
 export interface Student {
   id: number;
   number: number;
@@ -40,6 +59,7 @@ export interface Student {
   hiddenAbilityPending?: boolean; // 선생님 사용 승인 대기 중 (1회 제한)
   score: number; // 총계 점수 (누적 총점)
   todayScore: number; // 오늘의 점수 (오늘 획득 점수)
+  missionScores?: { [key: string]: number }; // 미션1~6별 개별 점수
   selectedAt?: string;
   teamNumber: number; // 1~5모둠
 }

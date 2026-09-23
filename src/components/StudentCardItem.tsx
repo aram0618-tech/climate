@@ -1,5 +1,5 @@
-import React from 'react';
-import { Student, ClimateCard, CurrentUser } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Student, ClimateCard, CurrentUser, MissionId, MISSIONS_LIST } from '../types';
 import { getCardById } from '../data/climateCards';
 import { CharacterAvatar } from './CharacterAvatar';
 import { soundManager } from '../utils/audio';
@@ -14,51 +14,66 @@ import {
   XCircle,
   AlertCircle,
   User,
+  RotateCcw,
+  Target,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface StudentCardItemProps {
   student: Student;
   currentUser: CurrentUser;
+  activeMission?: MissionId;
+  autoResetTodayScore?: boolean;
   onToggleMajorAbility: (studentId: number) => void;
   onToggleHiddenAbility: (studentId: number) => void;
   onRequestAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onApproveAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onRejectAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
-  onUpdateScore: (studentId: number, delta: number) => void;
+  onUpdateScore: (studentId: number, delta: number, missionId?: MissionId, resetToday?: boolean) => void;
+  onResetStudentTodayScore?: (studentId: number) => void;
   onMultiplyScore?: (studentId: number, multiplier: number) => void;
   onClickCard?: (student: Student) => void;
   defaultScoreStep?: number;
+  onSelectMission?: (missionId: MissionId) => void;
 }
 
 export const StudentCardItem: React.FC<StudentCardItemProps> = ({
   student,
   currentUser,
+  activeMission = 'today',
+  autoResetTodayScore = false,
   onToggleMajorAbility,
   onToggleHiddenAbility,
   onRequestAbility,
   onApproveAbility,
   onRejectAbility,
   onUpdateScore,
+  onResetStudentTodayScore,
   onMultiplyScore,
   onClickCard,
   defaultScoreStep = 1,
+  onSelectMission,
 }) => {
   const card: ClimateCard | null = getCardById(student.selectedCharacterId);
   const isLoggedInStudent = currentUser.studentId === student.id;
   const isTeacher = currentUser.role === 'teacher';
 
-  const [inputRaiseAmount, setInputRaiseAmount] = React.useState<string>(String(defaultScoreStep || 1));
-  const [recentAddedDelta, setRecentAddedDelta] = React.useState<number | null>(null);
+  const [inputRaiseAmount, setInputRaiseAmount] = useState<string>(String(defaultScoreStep || 1));
+  const [recentAddedDelta, setRecentAddedDelta] = useState<number | null>(null);
+  const [showMissionsExpanded, setShowMissionsExpanded] = useState<boolean>(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof defaultScoreStep === 'number') {
       setInputRaiseAmount(String(defaultScoreStep));
     }
   }, [defaultScoreStep]);
 
+  const activeMissionDef = MISSIONS_LIST.find((m) => m.id === activeMission);
+
   const handleScoreChange = (e: React.MouseEvent, delta: number) => {
     e.stopPropagation();
-    onUpdateScore(student.id, delta);
+    onUpdateScore(student.id, delta, activeMission, autoResetTodayScore);
     soundManager.playScoreDing();
   };
 
@@ -70,13 +85,20 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
     const delta = parseInt(inputRaiseAmount, 10);
     if (isNaN(delta) || delta === 0) return;
 
-    onUpdateScore(student.id, delta);
+    onUpdateScore(student.id, delta, activeMission, autoResetTodayScore);
     soundManager.playScoreDing();
 
     setRecentAddedDelta(delta);
     setTimeout(() => {
       setRecentAddedDelta(null);
     }, 1500);
+  };
+
+  const handleResetToday = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onResetStudentTodayScore) {
+      onResetStudentTodayScore(student.id);
+    }
   };
 
   const handleDoubleScore = (e: React.MouseEvent) => {
@@ -413,11 +435,28 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
           </div>
         </div>
 
-        {/* SECTION 4: Today's Score & Cumulative Total Score (오늘의 점수 & 총계 점수) */}
+        {/* SECTION 4: Today's Score, Selected Mission & Cumulative Total Score */}
         <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-2 flex-shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800">
+          {/* Active Mission Pill (미션 1~6 선택 시 해당 미션 획득 점수 강조) */}
+          {activeMission !== 'today' && activeMissionDef && (
+            <div
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-indigo-950/60 border border-indigo-500/60 text-indigo-200 shadow-2xs"
+              title={`${activeMissionDef.label} 획득 점수`}
+            >
+              <Target className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+              <span className="text-[11px] font-extrabold text-indigo-300 whitespace-nowrap">
+                {activeMissionDef.shortLabel}
+              </span>
+              <span className="text-sm font-black text-indigo-100 px-0.5">
+                {student.missionScores?.[activeMission] || 0}
+              </span>
+              <span className="text-[11px] font-bold text-indigo-300">점</span>
+            </div>
+          )}
+
           {/* Today's Score Pill */}
           <div
-            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-950/50 border border-emerald-700/60 text-emerald-300 shadow-2xs"
+            className="flex items-center gap-1 px-2 py-1 rounded-xl bg-emerald-950/50 border border-emerald-700/60 text-emerald-300 shadow-2xs relative group"
             title="오늘 수업에서 획득한 점수"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
@@ -426,6 +465,18 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
               +{student.todayScore || 0}
             </span>
             <span className="text-[11px] font-bold text-emerald-400">점</span>
+
+            {/* Teacher-Only Quick Reset Today's Score button (User Request: 오늘 점수 0점 리셋) */}
+            {currentUser.role === 'teacher' && onResetStudentTodayScore && (
+              <button
+                type="button"
+                onClick={handleResetToday}
+                title="이 학생의 오늘 점수를 0점으로 리셋"
+                className="ml-1 p-0.5 rounded hover:bg-emerald-900/80 text-emerald-400/70 hover:text-amber-300 transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+              </button>
+            )}
           </div>
 
           {/* Total Score Pill */}
@@ -441,7 +492,7 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
             <span className="text-[11px] font-bold text-amber-400">점</span>
           </div>
 
-          {/* Teacher-Only Score Adjustment Controls (오직 선생님만 점수 추가/차감 가능) */}
+          {/* Teacher-Only Score Adjustment Controls */}
           {currentUser.role === 'teacher' && (
             <div
               className="flex items-center gap-1.5 pl-1.5 sm:border-l sm:border-slate-800"
@@ -458,9 +509,13 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
                 <Minus className="w-3.5 h-3.5" />
               </button>
 
-              {/* Direct Score Input Box & Raise Button (점수 입력 칸에 숫자를 적어 한번에 올리기) */}
+              {/* Direct Score Input Box & Raise Button */}
               <div
-                className="flex items-center rounded-lg bg-slate-950 border border-slate-700 focus-within:border-emerald-500 overflow-hidden shadow-inner"
+                className={`flex items-center rounded-lg bg-slate-950 border overflow-hidden shadow-inner ${
+                  activeMission !== 'today'
+                    ? 'border-indigo-700/80 focus-within:border-indigo-400'
+                    : 'border-slate-700 focus-within:border-emerald-500'
+                }`}
                 title="올릴 점수를 입력 후 올리기 버튼 또는 Enter를 누르세요"
               >
                 <input
@@ -477,17 +532,27 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
                   }}
                   onClick={(e) => e.stopPropagation()}
                   placeholder="1"
-                  className="w-10 sm:w-12 h-7 bg-transparent px-1 text-xs text-center font-black text-emerald-300 placeholder-slate-500 focus:outline-none"
+                  className={`w-10 sm:w-12 h-7 bg-transparent px-1 text-xs text-center font-black placeholder-slate-500 focus:outline-none ${
+                    activeMission !== 'today' ? 'text-indigo-300' : 'text-emerald-300'
+                  }`}
                 />
                 <button
                   type="button"
                   onClick={handleRaiseScoreDirect}
-                  title={`${parseInt(inputRaiseAmount, 10) || 1}점 한번에 올리기`}
-                  className="h-7 px-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black text-xs flex items-center gap-0.5 transition-colors whitespace-nowrap shadow-2xs"
+                  title={`${parseInt(inputRaiseAmount, 10) || 1}점 ${activeMission !== 'today' ? activeMissionDef?.label : ''} 올리기`}
+                  className={`h-7 px-2 text-white font-black text-xs flex items-center gap-0.5 transition-colors whitespace-nowrap shadow-2xs ${
+                    activeMission !== 'today'
+                      ? 'bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700'
+                      : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700'
+                  }`}
                 >
                   <Plus className="w-3 h-3" />
                   <span className="text-[11px] font-black">
-                    {parseInt(inputRaiseAmount, 10) > 1 ? `+${parseInt(inputRaiseAmount, 10)}점` : '올리기'}
+                    {parseInt(inputRaiseAmount, 10) > 1
+                      ? `+${parseInt(inputRaiseAmount, 10)}점`
+                      : activeMission !== 'today'
+                      ? activeMissionDef?.shortLabel
+                      : '올리기'}
                   </span>
                 </button>
               </div>
@@ -510,8 +575,58 @@ export const StudentCardItem: React.FC<StudentCardItemProps> = ({
               )}
             </div>
           )}
+
+          {/* Toggle Missions 1-6 Overview Button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMissionsExpanded(!showMissionsExpanded);
+            }}
+            title="미션 1~6 개별 점수 현황 열기/닫기"
+            className="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-indigo-300 text-xs flex items-center gap-1 transition-colors"
+          >
+            <span className="text-[10px] font-bold hidden sm:inline">미션현황</span>
+            {showMissionsExpanded ? (
+              <ChevronUp className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" />
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Expanded Missions 1~6 Score Pill Grid (User Request: 미션1~미션6 점수 확인 및 선택) */}
+      {showMissionsExpanded && (
+        <div
+          className="mt-2 pt-2 border-t border-slate-800/80 grid grid-cols-3 sm:grid-cols-6 gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {MISSIONS_LIST.filter((m) => m.id !== 'today').map((m) => {
+            const mScore = student.missionScores?.[m.id] || 0;
+            const isSelected = activeMission === m.id;
+            return (
+              <div
+                key={m.id}
+                onClick={() => onSelectMission && onSelectMission(m.id)}
+                className={`p-1.5 rounded-lg border text-center transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-indigo-950 border-indigo-400 text-indigo-100 ring-1 ring-indigo-400/40 shadow-xs'
+                    : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
+                }`}
+                title={`클릭 시 [${m.label}] 점수 입력 모드로 전환`}
+              >
+                <div className="text-[10px] font-bold text-slate-400 leading-none truncate">
+                  {m.label}
+                </div>
+                <div className="text-xs font-black text-amber-300 mt-0.5">
+                  {mScore}점
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

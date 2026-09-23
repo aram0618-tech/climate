@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Student } from '../types';
+import { Student, MissionId, MISSIONS_LIST } from '../types';
 import { getCardById } from '../data/climateCards';
 import {
   GraduationCap,
@@ -18,6 +18,9 @@ import {
   Lock,
   ShieldCheck,
   ShieldAlert,
+  Target,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { getTeacherPin, setTeacherPin } from '../utils/teacherSecurity';
 import { soundManager } from '../utils/audio';
@@ -31,10 +34,16 @@ interface TeacherControlModalProps {
   onResetEntireClass: () => void;
   onAddScoreAll: (points: number) => void;
   onResetTodayScore?: () => void;
+  onBatchMissionScore?: (missionId: MissionId, points: number, resetToday?: boolean) => void;
   onApproveAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onRejectAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onLockTeacherMode?: () => void;
-  onSetStudentScore?: (studentId: number, newScore: number, newTodayScore?: number) => void;
+  onSetStudentScore?: (
+    studentId: number,
+    newScore: number,
+    newTodayScore?: number,
+    missionScores?: { [key: string]: number }
+  ) => void;
 }
 
 export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
@@ -46,6 +55,7 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
   onResetEntireClass,
   onAddScoreAll,
   onResetTodayScore,
+  onBatchMissionScore,
   onApproveAbility,
   onRejectAbility,
   onLockTeacherMode,
@@ -55,13 +65,16 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
   const [confirmFullReset, setConfirmFullReset] = useState<boolean>(false);
   const [confirmResetText, setConfirmResetText] = useState<string>('');
 
-  // Custom batch points
+  // Custom batch points & target mission
   const [customBatchPoints, setCustomBatchPoints] = useState<number>(5);
+  const [batchTargetMission, setBatchTargetMission] = useState<MissionId>('today');
+  const [batchAutoResetToday, setBatchAutoResetToday] = useState<boolean>(true);
 
   // Direct score adjustment state
   const [selectedStudentForScore, setSelectedStudentForScore] = useState<number>(1);
   const [inputTotalScore, setInputTotalScore] = useState<number>(0);
   const [inputTodayScore, setInputTodayScore] = useState<number>(0);
+  const [inputMissionScores, setInputMissionScores] = useState<{ [key: string]: number }>({});
   const [scoreSaveMsg, setScoreSaveMsg] = useState<string | null>(null);
 
   // Update input fields when student selection changes or modal opens
@@ -71,8 +84,9 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
     if (activeStudent) {
       setInputTotalScore(activeStudent.score || 0);
       setInputTodayScore(activeStudent.todayScore || 0);
+      setInputMissionScores(activeStudent.missionScores ? { ...activeStudent.missionScores } : {});
     }
-  }, [selectedStudentForScore, activeStudent?.score, activeStudent?.todayScore, isOpen]);
+  }, [selectedStudentForScore, activeStudent?.score, activeStudent?.todayScore, activeStudent?.missionScores, isOpen]);
 
   // Change PIN state
   const [isChangingPin, setIsChangingPin] = useState<boolean>(false);
@@ -88,7 +102,7 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
     const safeToday = Math.max(0, Number(inputTodayScore) || 0);
 
     if (onSetStudentScore) {
-      onSetStudentScore(selectedStudentForScore, safeTotal, safeToday);
+      onSetStudentScore(selectedStudentForScore, safeTotal, safeToday, inputMissionScores);
     }
     soundManager.playScoreDing();
     setScoreSaveMsg(`${activeStudent?.number}번 ${activeStudent?.name} 학생의 점수가 안전하게 저장되었습니다!`);
@@ -256,47 +270,85 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
           </div>
 
           {/* SECTION 1: Batch Score Adjustment */}
-          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
-            <h4 className="text-xs font-black text-slate-200 mb-1 flex items-center gap-1.5">
-              <Award className="w-4 h-4 text-amber-400" />
-              학급 전체 점수 일괄 보너스 부여
-            </h4>
-            <p className="text-xs text-slate-400 mb-3">
-              학급 전체 참여나 보너스 미션 달성 시 21명 전원에게 동시에 점수를 추가합니다.
-            </p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => onAddScoreAll(1)}
-                className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-emerald-950 text-emerald-300 border border-slate-700 hover:border-emerald-700 text-xs font-black transition-all flex items-center gap-1"
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-black text-slate-200 flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-amber-400" />
+                  학급 전체 점수 일괄 보너스 / 미션별 부여
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  미션을 선택하고 점수를 일괄 부여할 수 있습니다.
+                </p>
+              </div>
+
+              {/* Auto reset today score toggle */}
+              <label
+                onClick={() => setBatchAutoResetToday(!batchAutoResetToday)}
+                className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-300 hover:text-emerald-300 select-none px-2 py-1 rounded-lg bg-slate-900 border border-slate-700"
               >
-                전원 +1점
-              </button>
+                {batchAutoResetToday ? (
+                  <CheckSquare className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-600" />
+                )}
+                <span>점수 부여 시 오늘 점수 0점 리셋</span>
+              </label>
+            </div>
+
+            {/* Target Mission Selector */}
+            <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5">
+              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                <Target className="w-3.5 h-3.5 text-indigo-400" />
+                점수를 부여할 대상 선택:
+              </span>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {MISSIONS_LIST.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setBatchTargetMission(m.id)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black whitespace-nowrap transition-all border ${
+                      batchTargetMission === m.id
+                        ? 'bg-indigo-600 text-white border-indigo-400 shadow-sm'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[1, 2, 3, 5].map((pts) => (
+                <button
+                  key={pts}
+                  type="button"
+                  onClick={() => {
+                    const mDef = MISSIONS_LIST.find((m) => m.id === batchTargetMission);
+                    if (onBatchMissionScore) {
+                      onBatchMissionScore(batchTargetMission, pts, batchAutoResetToday);
+                      alert(`우리 반 21명 전원에게 [${mDef?.label}] +${pts}점이 부여되었습니다.`);
+                    } else {
+                      onAddScoreAll(pts);
+                    }
+                  }}
+                  className="py-1.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-950 text-emerald-300 border border-slate-700 hover:border-emerald-700 text-xs font-black transition-all flex items-center gap-1"
+                >
+                  전원 +{pts}점
+                </button>
+              ))}
               <button
                 type="button"
-                onClick={() => onAddScoreAll(2)}
-                className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-emerald-950 text-emerald-300 border border-slate-700 hover:border-emerald-700 text-xs font-black transition-all flex items-center gap-1"
-              >
-                전원 +2점
-              </button>
-              <button
-                type="button"
-                onClick={() => onAddScoreAll(3)}
-                className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-emerald-950 text-emerald-300 border border-slate-700 hover:border-emerald-700 text-xs font-black transition-all flex items-center gap-1"
-              >
-                전원 +3점
-              </button>
-              <button
-                type="button"
-                onClick={() => onAddScoreAll(5)}
-                className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-emerald-950 text-emerald-300 border border-slate-700 hover:border-emerald-700 text-xs font-black transition-all flex items-center gap-1"
-              >
-                전원 +5점
-              </button>
-              <button
-                type="button"
-                onClick={() => onAddScoreAll(-1)}
-                className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-rose-950 text-rose-300 border border-slate-700 hover:border-rose-800 text-xs font-black transition-all"
+                onClick={() => {
+                  if (onBatchMissionScore) {
+                    onBatchMissionScore(batchTargetMission, -1, false);
+                  } else {
+                    onAddScoreAll(-1);
+                  }
+                }}
+                className="py-1.5 px-3 rounded-xl bg-slate-900 hover:bg-rose-950 text-rose-300 border border-slate-700 hover:border-rose-800 text-xs font-black transition-all"
               >
                 전원 -1점
               </button>
@@ -305,7 +357,7 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
             {/* Custom Batch Points Input */}
             <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
               <span className="text-xs text-slate-300 font-bold whitespace-nowrap">
-                원하는 점수 직접 입력:
+                [{MISSIONS_LIST.find((m) => m.id === batchTargetMission)?.label}] 점수 직접 입력:
               </span>
               <div className="flex items-center gap-2">
                 <input
@@ -319,8 +371,13 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
                   type="button"
                   onClick={() => {
                     if (!customBatchPoints) return;
-                    onAddScoreAll(customBatchPoints);
-                    alert(`전원에게 ${customBatchPoints > 0 ? '+' : ''}${customBatchPoints}점이 일괄 지급되었습니다.`);
+                    const mDef = MISSIONS_LIST.find((m) => m.id === batchTargetMission);
+                    if (onBatchMissionScore) {
+                      onBatchMissionScore(batchTargetMission, customBatchPoints, batchAutoResetToday);
+                    } else {
+                      onAddScoreAll(customBatchPoints);
+                    }
+                    alert(`전원에게 [${mDef?.label}] ${customBatchPoints > 0 ? '+' : ''}${customBatchPoints}점이 지급되었습니다.`);
                   }}
                   className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-colors"
                 >
@@ -331,18 +388,19 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
 
             {onResetTodayScore && (
               <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between">
-                <span className="text-xs text-slate-400">오늘의 획득 점수만 리셋:</span>
+                <span className="text-xs text-slate-400">오늘의 획득 점수만 0점으로 리셋:</span>
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('오늘의 획득 점수를 모두 0으로 초기화하시겠습니까? (누적 총점은 보존됩니다)')) {
+                    if (confirm('우리 반 전원의 오늘의 획득 점수를 모두 0으로 초기화하시겠습니까? (누적 총점 및 미션 1~6 점수는 안전하게 유지됩니다)')) {
                       onResetTodayScore();
-                      alert('오늘의 점수가 초기화되었습니다.');
+                      alert('전원의 오늘의 점수가 0점으로 리셋되었습니다.');
                     }
                   }}
-                  className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-amber-950 text-amber-300 border border-amber-800/80 text-xs font-bold"
+                  className="px-2.5 py-1 rounded-lg bg-amber-950/70 hover:bg-amber-900 text-amber-300 border border-amber-800 text-xs font-bold flex items-center gap-1 transition-colors"
                 >
-                  오늘 점수만 0점 리셋
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>오늘 점수 전원 0점 리셋</span>
                 </button>
               </div>
             )}
@@ -400,6 +458,34 @@ export const TeacherControlModal: React.FC<TeacherControlModalProps> = ({
                     onChange={(e) => setInputTodayScore(Number(e.target.value))}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-300 font-black focus:outline-none focus:border-emerald-500"
                   />
+                </div>
+              </div>
+
+              {/* Mission 1~6 direct editor */}
+              <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
+                <label className="text-[11px] text-slate-400 font-bold block mb-1.5">
+                  미션 1 ~ 6 개별 점수 직접 수정:
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {MISSIONS_LIST.filter((m) => m.id !== 'today').map((m) => (
+                    <div key={m.id} className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold block mb-0.5 truncate">
+                        {m.shortLabel}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={inputMissionScores[m.id] ?? 0}
+                        onChange={(e) =>
+                          setInputMissionScores({
+                            ...inputMissionScores,
+                            [m.id]: Math.max(0, Number(e.target.value)),
+                          })
+                        }
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-xs text-amber-300 font-bold text-center focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
 

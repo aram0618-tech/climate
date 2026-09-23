@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ClimateCard, Student, CurrentUser, QuizQuestion, QuizSubmission } from './types';
+import { ClimateCard, Student, CurrentUser, QuizQuestion, QuizSubmission, MissionId } from './types';
 import { CLIMATE_CARDS } from './data/climateCards';
 import { loadStoredStudents, saveStoredStudents, resetAllStudents } from './data/students';
 import {
@@ -302,16 +302,34 @@ export default function App() {
   };
 
   // Update Score for single student (오늘 점수 & 누적 총점 모두 반영)
-  const handleUpdateScore = (studentId: number, delta: number) => {
+  const handleUpdateScore = (
+    studentId: number,
+    delta: number,
+    missionId: MissionId = 'today',
+    resetTodayAfterAward: boolean = false
+  ) => {
     setStudents((prev) => {
       const updatedList = prev.map((s) => {
         if (s.id === studentId) {
           const currentScore = typeof s.score === 'number' && !isNaN(s.score) ? s.score : 0;
           const currentToday = typeof s.todayScore === 'number' && !isNaN(s.todayScore) ? s.todayScore : 0;
+          const currentMissionScores = s.missionScores ? { ...s.missionScores } : {};
+
+          if (missionId && missionId !== 'today') {
+            const currentMScore = currentMissionScores[missionId] || 0;
+            currentMissionScores[missionId] = Math.max(0, currentMScore + delta);
+          }
+
+          // User Request: 오늘의 점수를 주고 나서 오늘의 점수가 0점으로 다시 리셋되게 해줘
+          const nextTodayScore = resetTodayAfterAward
+            ? 0
+            : (missionId === 'today' ? Math.max(0, currentToday + delta) : currentToday);
+
           const updated: Student = {
             ...s,
             score: Math.max(0, currentScore + delta),
-            todayScore: Math.max(0, currentToday + delta),
+            todayScore: nextTodayScore,
+            missionScores: currentMissionScores,
           };
           syncStudentToFirestore(updated);
           return updated;
@@ -324,7 +342,12 @@ export default function App() {
   };
 
   // Directly set score for a student (선생님 직접 숫자 입력 지원)
-  const handleSetStudentScore = (studentId: number, newScore: number, newTodayScore?: number) => {
+  const handleSetStudentScore = (
+    studentId: number,
+    newScore: number,
+    newTodayScore?: number,
+    newMissionScores?: { [key: string]: number }
+  ) => {
     setStudents((prev) => {
       const updatedList = prev.map((s) => {
         if (s.id === studentId) {
@@ -340,6 +363,7 @@ export default function App() {
             ...s,
             score: safeScore,
             todayScore: safeToday,
+            missionScores: newMissionScores ? { ...s.missionScores, ...newMissionScores } : s.missionScores,
           };
           syncStudentToFirestore(updated);
           return updated;
@@ -351,18 +375,91 @@ export default function App() {
     });
   };
 
+  // Reset single student's today score to 0
+  const handleResetStudentTodayScore = (studentId: number) => {
+    setStudents((prev) => {
+      const updatedList = prev.map((s) => {
+        if (s.id === studentId) {
+          const updated: Student = {
+            ...s,
+            todayScore: 0,
+          };
+          syncStudentToFirestore(updated);
+          return updated;
+        }
+        return s;
+      });
+      saveStoredStudents(updatedList);
+      return updatedList;
+    });
+  };
+
+  // Batch award points to a mission (전원 일괄 미션 점수 부여)
+  const handleBatchMissionScore = (
+    missionId: MissionId,
+    points: number,
+    resetTodayAfterAward: boolean = false
+  ) => {
+    setStudents((prev) => {
+      const updated = prev.map((s) => {
+        const currentScore = typeof s.score === 'number' && !isNaN(s.score) ? s.score : 0;
+        const currentToday = typeof s.todayScore === 'number' && !isNaN(s.todayScore) ? s.todayScore : 0;
+        const currentMissionScores = s.missionScores ? { ...s.missionScores } : {};
+
+        if (missionId && missionId !== 'today') {
+          const currentMScore = currentMissionScores[missionId] || 0;
+          currentMissionScores[missionId] = Math.max(0, currentMScore + points);
+        }
+
+        const nextToday = resetTodayAfterAward
+          ? 0
+          : (missionId === 'today' ? Math.max(0, currentToday + points) : currentToday);
+
+        return {
+          ...s,
+          score: Math.max(0, currentScore + points),
+          todayScore: nextToday,
+          missionScores: currentMissionScores,
+        };
+      });
+      syncAllStudentsToFirestore(updated);
+      saveStoredStudents(updated);
+      return updated;
+    });
+    if (soundEnabled) {
+      soundManager.playScoreDing();
+    }
+  };
+
   // Update Score for entire team (모둠전용: 모둠원 전원의 오늘 점수 & 누적 총점 동시 반영)
-  const handleUpdateTeamScore = (teamNumber: number, delta: number) => {
+  const handleUpdateTeamScore = (
+    teamNumber: number,
+    delta: number,
+    missionId: MissionId = 'today',
+    resetTodayAfterAward: boolean = false
+  ) => {
     setStudents((prev) => {
       const updatedStudentsToSync: Student[] = [];
       const updatedList = prev.map((s) => {
         if (s.teamNumber === teamNumber) {
           const currentScore = typeof s.score === 'number' && !isNaN(s.score) ? s.score : 0;
           const currentToday = typeof s.todayScore === 'number' && !isNaN(s.todayScore) ? s.todayScore : 0;
+          const currentMissionScores = s.missionScores ? { ...s.missionScores } : {};
+
+          if (missionId && missionId !== 'today') {
+            const currentMScore = currentMissionScores[missionId] || 0;
+            currentMissionScores[missionId] = Math.max(0, currentMScore + delta);
+          }
+
+          const nextToday = resetTodayAfterAward
+            ? 0
+            : (missionId === 'today' ? Math.max(0, currentToday + delta) : currentToday);
+
           const updated: Student = {
             ...s,
             score: Math.max(0, currentScore + delta),
-            todayScore: Math.max(0, currentToday + delta),
+            todayScore: nextToday,
+            missionScores: currentMissionScores,
           };
           updatedStudentsToSync.push(updated);
           return updated;
@@ -752,6 +849,9 @@ export default function App() {
               onApproveAbility={handleApproveAbility}
               onRejectAbility={handleRejectAbility}
               onUpdateScore={handleUpdateScore}
+              onResetStudentTodayScore={handleResetStudentTodayScore}
+              onResetTodayScores={handleResetTodayScores}
+              onBatchMissionScore={handleBatchMissionScore}
               onMultiplyScore={handleMultiplyScore}
               onClickStudent={handleOpenStudentDetail}
             />
@@ -824,6 +924,7 @@ export default function App() {
         onApproveAbility={handleApproveAbility}
         onRejectAbility={handleRejectAbility}
         onUpdateScore={handleUpdateScore}
+        onResetStudentTodayScore={handleResetStudentTodayScore}
         onSetStudentScore={handleSetStudentScore}
       />
 
@@ -837,6 +938,7 @@ export default function App() {
         onResetEntireClass={handleResetEntireClass}
         onAddScoreAll={handleAddScoreAll}
         onResetTodayScore={handleResetTodayScores}
+        onBatchMissionScore={handleBatchMissionScore}
         onApproveAbility={handleApproveAbility}
         onRejectAbility={handleRejectAbility}
         onLockTeacherMode={handleLockTeacherMode}

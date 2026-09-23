@@ -1,8 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Student, ClimateCard, CurrentUser } from '../types';
+import { Student, ClimateCard, CurrentUser, MissionId, MISSIONS_LIST } from '../types';
 import { getCardById } from '../data/climateCards';
 import { CharacterAvatar } from './CharacterAvatar';
-import { X, Award, Zap, Sparkles, Snowflake, Sun, CloudRain, Wind, CheckCircle2, XCircle, Clock, Edit3, Check, Plus } from 'lucide-react';
+import {
+  X,
+  Award,
+  Zap,
+  Sparkles,
+  Snowflake,
+  Sun,
+  CloudRain,
+  Wind,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Edit3,
+  Check,
+  Plus,
+  RotateCcw,
+  Target,
+} from 'lucide-react';
 import { soundManager } from '../utils/audio';
 
 interface StudentDetailModalProps {
@@ -15,8 +32,14 @@ interface StudentDetailModalProps {
   onRequestAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onApproveAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
   onRejectAbility?: (studentId: number, abilityType: 'major' | 'hidden') => void;
-  onUpdateScore: (studentId: number, delta: number) => void;
-  onSetStudentScore?: (studentId: number, totalScore: number, todayScore?: number) => void;
+  onUpdateScore: (studentId: number, delta: number, missionId?: MissionId, resetToday?: boolean) => void;
+  onResetStudentTodayScore?: (studentId: number) => void;
+  onSetStudentScore?: (
+    studentId: number,
+    totalScore: number,
+    todayScore?: number,
+    missionScores?: { [key: string]: number }
+  ) => void;
 }
 
 export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
@@ -30,11 +53,14 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   onApproveAbility,
   onRejectAbility,
   onUpdateScore,
+  onResetStudentTodayScore,
   onSetStudentScore,
 }) => {
   const [isDirectEditing, setIsDirectEditing] = useState(false);
   const [customTotalScore, setCustomTotalScore] = useState<number>(0);
   const [customTodayScore, setCustomTodayScore] = useState<number>(0);
+  const [customMissionScores, setCustomMissionScores] = useState<{ [key: string]: number }>({});
+  const [selectedMissionForRaise, setSelectedMissionForRaise] = useState<MissionId>('today');
   const [directRaisePoints, setDirectRaisePoints] = useState<string>('1');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
@@ -42,8 +68,9 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     if (student) {
       setCustomTotalScore(student.score || 0);
       setCustomTodayScore(student.todayScore || 0);
+      setCustomMissionScores(student.missionScores ? { ...student.missionScores } : {});
     }
-  }, [student?.id, student?.score, student?.todayScore]);
+  }, [student?.id, student?.score, student?.todayScore, student?.missionScores]);
 
   if (!isOpen || !student) return null;
 
@@ -58,7 +85,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     const safeToday = Math.max(0, Number(customTodayScore) || 0);
 
     if (onSetStudentScore) {
-      onSetStudentScore(student.id, safeTotal, safeToday);
+      onSetStudentScore(student.id, safeTotal, safeToday, customMissionScores);
     } else {
       const delta = safeTotal - (student.score || 0);
       onUpdateScore(student.id, delta);
@@ -323,18 +350,81 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
               </div>
             </div>
 
+            {/* Missions 1~6 Score Status (User Request: 미션1~6 점수 확인 및 입력) */}
+            <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-indigo-300 flex items-center gap-1.5">
+                  <Target className="w-4 h-4 text-indigo-400" />
+                  미션 1 ~ 6 획득 점수 현황
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  미션 총합: <strong className="text-amber-300 font-bold">{Object.values(student.missionScores || {}).reduce((acc: number, curr: number) => acc + (curr || 0), 0)}점</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {MISSIONS_LIST.filter((m) => m.id !== 'today').map((m) => {
+                  const score = student.missionScores?.[m.id] || 0;
+                  const isSelected = selectedMissionForRaise === m.id;
+                  return (
+                    <div
+                      key={m.id}
+                      onClick={() => setSelectedMissionForRaise(m.id)}
+                      className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-950/80 border-indigo-500 shadow-sm ring-1 ring-indigo-500/40'
+                          : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                      }`}
+                      title={`${m.label} 점수 입력 대상으로 선택`}
+                    >
+                      <span className="text-[10px] font-bold text-slate-400 block truncate">{m.label}</span>
+                      <span className="text-sm font-black text-amber-300 block mt-0.5">{score}점</span>
+                      {isTeacher && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdateScore(student.id, 1, m.id);
+                            soundManager.playScoreDing();
+                          }}
+                          title={`${m.label} +1점 올리기`}
+                          className="mt-1 w-full py-0.5 rounded bg-indigo-900/60 hover:bg-indigo-700 text-[10px] font-bold text-indigo-200 transition-colors"
+                        >
+                          +1점
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Score Adjustment: Teacher Only */}
             {currentUser.role === 'teacher' ? (
               <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-black text-slate-200 flex items-center gap-1.5">
                       <Award className="w-4 h-4 text-amber-400" />
                       선생님 점수 관리 & 직접 입력
                     </span>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[11px] text-slate-400">
                       오늘 점수: <strong className="text-emerald-400">+{student.todayScore || 0}점</strong> · 누적 총점: <strong className="text-amber-400">{student.score || 0}점</strong>
                     </span>
+                    {onResetStudentTodayScore && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onResetStudentTodayScore(student.id);
+                          setCustomTodayScore(0);
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-amber-950/70 hover:bg-amber-900 text-amber-300 border border-amber-800 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                        title="오늘의 점수를 0점으로 리셋"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>오늘 점수 0점 리셋</span>
+                      </button>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -347,10 +437,11 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                 </div>
 
                 {isDirectEditing ? (
-                  <form onSubmit={handleSaveDirectScore} className="p-3 rounded-xl bg-slate-900 border border-indigo-900/60 space-y-2.5">
+                  <form onSubmit={handleSaveDirectScore} className="p-3 rounded-xl bg-slate-900 border border-indigo-900/60 space-y-3">
                     <div className="text-[11px] font-bold text-indigo-300 flex items-center gap-1">
                       <span>✏️ 점수 직접 수정 (저장 시 클라우드 및 새로고침 영구 보존)</span>
                     </div>
+
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-[11px] text-slate-400 font-bold block mb-1">
@@ -377,6 +468,35 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                         />
                       </div>
                     </div>
+
+                    {/* Mission 1~6 Custom Scores Inputs */}
+                    <div>
+                      <label className="text-[11px] text-slate-400 font-bold block mb-1.5">
+                        미션 1 ~ 6 개별 점수 직접 수정:
+                      </label>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                        {MISSIONS_LIST.filter((m) => m.id !== 'today').map((m) => (
+                          <div key={m.id} className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
+                            <span className="text-[10px] text-slate-400 font-bold block mb-0.5 truncate">
+                              {m.shortLabel}
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={customMissionScores[m.id] ?? 0}
+                              onChange={(e) =>
+                                setCustomMissionScores({
+                                  ...customMissionScores,
+                                  [m.id]: Math.max(0, Number(e.target.value)),
+                                })
+                              }
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-xs text-amber-300 font-bold text-center focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                     <div className="flex items-center justify-between pt-1">
                       {saveSuccessMsg ? (
                         <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
@@ -398,12 +518,33 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   </form>
                 ) : (
                   <div className="space-y-2.5 pt-1 border-t border-slate-800/80">
+                    {/* Mission Target Select for Button Mode */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                      <span className="text-[11px] text-slate-400 font-bold whitespace-nowrap">올릴 대상:</span>
+                      {MISSIONS_LIST.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setSelectedMissionForRaise(m.id)}
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors border ${
+                            selectedMissionForRaise === m.id
+                              ? 'bg-indigo-600 text-white border-indigo-400'
+                              : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          {m.shortLabel}
+                        </button>
+                      ))}
+                    </div>
+
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] text-slate-400">빠른 점수 증감:</span>
+                      <span className="text-[11px] text-slate-400">
+                        [{MISSIONS_LIST.find((m) => m.id === selectedMissionForRaise)?.label}] 빠른 증감:
+                      </span>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => onUpdateScore(student.id, -1)}
+                          onClick={() => onUpdateScore(student.id, -1, selectedMissionForRaise)}
                           className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-700 text-xs font-bold"
                         >
                           -1점
@@ -411,7 +552,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            onUpdateScore(student.id, 1);
+                            onUpdateScore(student.id, 1, selectedMissionForRaise);
                             soundManager.playScoreDing();
                           }}
                           className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-2xs"
@@ -421,7 +562,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            onUpdateScore(student.id, 2);
+                            onUpdateScore(student.id, 2, selectedMissionForRaise);
                             soundManager.playScoreDing();
                           }}
                           className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-black shadow-2xs"
@@ -431,7 +572,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            onUpdateScore(student.id, 5);
+                            onUpdateScore(student.id, 5, selectedMissionForRaise);
                             soundManager.playScoreDing();
                           }}
                           className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-black shadow-2xs"
@@ -444,7 +585,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     {/* Direct Raise Input Row */}
                     <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800">
                       <span className="text-xs font-bold text-slate-300">
-                        원하는 점수 숫자로 입력하여 한번에 올리기:
+                        [{MISSIONS_LIST.find((m) => m.id === selectedMissionForRaise)?.label}] 숫자로 올리기:
                       </span>
                       <div className="flex items-center gap-1.5">
                         <input
@@ -458,7 +599,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                               e.preventDefault();
                               const val = parseInt(directRaisePoints, 10);
                               if (!isNaN(val) && val !== 0) {
-                                onUpdateScore(student.id, val);
+                                onUpdateScore(student.id, val, selectedMissionForRaise);
                                 soundManager.playScoreDing();
                               }
                             }
@@ -471,7 +612,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                           onClick={() => {
                             const val = parseInt(directRaisePoints, 10);
                             if (!isNaN(val) && val !== 0) {
-                              onUpdateScore(student.id, val);
+                              onUpdateScore(student.id, val, selectedMissionForRaise);
                               soundManager.playScoreDing();
                             }
                           }}
